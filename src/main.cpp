@@ -1,3 +1,4 @@
+#define CURRENT_VERSION "v1.0.0"
 #include <Arduino.h>
 
 // Defines the trigger and echo pins
