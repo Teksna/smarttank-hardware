@@ -3,26 +3,18 @@
 #include <HTTPClient.h>
 #include <HTTPUpdate.h>
 #include <WiFiClientSecure.h>
-#include <SPI.h>
-#include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SH110X.h>
-#include <Fonts/FreeSans9pt7b.h>
 // WIFI
 const char* ssid = "Airtel_mohd_3792";
 const char* password = "Air@28347";
 
 // VERSION
-#define CURRENT_VERSION "v1.0.1"
+#define CURRENT_VERSION "v1.0.0"
 
 // Supabase
 String baseUrl = "https://yljggigahlagdihhycfj.supabase.co";
 String firmwareEndpoint = baseUrl + "/rest/v1/firmware?select=version,url&order=id.desc&limit=1";
 String anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlsamdnaWdhaGxhZ2RpaGh5Y2ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MDcwNTMsImV4cCI6MjA4ODI4MzA1M30.NeGRlQv-T-OGW4iqJPLV2T-2uPQxDNz0r9GHLAG8F-g";
 
-//OLED
-Adafruit_SH1106G display = Adafruit_SH1106G(128, 64, &Wire, -1);
-const int tankHeight = 100; // cm (CHANGE THIS)
 
 // Ultrasonic pins
 const int trigPin = 26;
@@ -30,49 +22,7 @@ const int echoPin = 27;
 
 long duration;
 int distanceCm;
-int capacity = 0;
-// ---------- DISPLAY FUNCTION ----------
-void displayStatus(int capacity)
-{
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SH110X_WHITE);
-  display.setFont(&FreeSans9pt7b);
-  display.setCursor(6,15);
 
-  // Tank outline
-  display.drawLine(0, display.height(), 0, 11, SH110X_WHITE);
-  display.drawLine(0, display.height()-1, 60, display.height()-1, SH110X_WHITE);
-  display.drawLine(60, display.height(), 60, 11, SH110X_WHITE);
-  display.drawLine(0, 11, 20, 1, SH110X_WHITE);
-  display.fillRect(20, 0, 20, 3,1);
-  display.drawLine(40, 1, 60, 11, SH110X_WHITE);
-  display.drawLine(1, 11, 59, 11, SH110X_WHITE);
-
-  // Volume header
-  display.fillRect(65, 0, 66, 20,1);
-  display.setCursor(67, 15);
-  display.setTextColor(SH110X_BLACK);
-  display.print("Volume");
-
-  display.setTextSize(2);
-  display.setTextColor(SH110X_WHITE);
-
-  if(capacity < 10) display.setCursor(84, 47);
-  else if (capacity < 100) display.setCursor(72, 47);
-  else display.setCursor(60, 47);
-
-  display.print(capacity);
-
-  // Fill tank animation
-  int tankfill = capacity / 2;  // scale for 64px height
-  display.fillRect(2, 62 - tankfill, 57, tankfill, 1);
-
-  display.setTextSize(1);
-  display.print("%");
-
-  display.display();
-}
 // 🔥 Extract value from JSON (simple parser)
 String extractValue(String payload, String key) {
   int start = payload.indexOf(key);
@@ -148,12 +98,7 @@ void setup() {
 
   pinMode(trigPin, OUTPUT);
   pinMode(echoPin, INPUT);
-  // Initialize display
-  display.begin(0x3C, true);
-  display.clearDisplay();
-  display.display();
 
-  // Connect to WiFi
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi");
 
@@ -168,10 +113,7 @@ void setup() {
   checkForUpdate();   //  only once
 }
 
-// ---------- LOOP ----------
 void loop() {
-
-  // Trigger ultrasonic
   digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
 
@@ -180,27 +122,11 @@ void loop() {
   digitalWrite(trigPin, LOW);
 
   duration = pulseIn(echoPin, HIGH);
-
-  // Distance in cm
   distanceCm = duration * 0.034 / 2;
 
-  // Convert to tank percentage
-  float waterLevel = tankHeight - distanceCm;
-  capacity = (waterLevel / tankHeight) * 100;
-
-  // Clamp values (IMPORTANT)
-  if (capacity > 100) capacity = 100;
-  if (capacity < 0) capacity = 0;
-
-  // Debug
   Serial.print("Distance: ");
   Serial.print(distanceCm);
-  Serial.print(" cm | Capacity: ");
-  Serial.print(capacity);
-  Serial.println(" %");
+  Serial.println(" cm");
 
-  // Update display
-  displayStatus(capacity);
-
-  delay(500);
+  delay(1000);
 }

@@ -13,7 +13,7 @@ const char* ssid = "Airtel_mohd_3792";
 const char* password = "Air@28347";
 
 // VERSION
-#define CURRENT_VERSION "v1.0.1"
+#define CURRENT_VERSION "v1.0.0"
 
 // Supabase
 String baseUrl = "https://yljggigahlagdihhycfj.supabase.co";
