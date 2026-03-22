@@ -495,7 +495,7 @@
                 "ARDUINO=10812",
                 "ARDUINO_VARIANT=\"esp32\"",
                 "ARDUINO_BOARD=\"AZ-Delivery ESP-32 Dev Kit C V4\"",
-                "ARDUINO_PARTITION_default",
+                "ARDUINO_PARTITION_default_ota",
                 ""
             ],
             "cStandard": "gnu99",

@@ -9,7 +9,7 @@ const char* ssid = "Airtel_mohd_3792";
 const char* password = "Air@28347";
 
 // VERSION
-#define CURRENT_VERSION "v1.0.1"
+#define CURRENT_VERSION "v1.0.0"
 
 // Supabase
 String baseUrl = "https://yljggigahlagdihhycfj.supabase.co";
@@ -63,9 +63,13 @@ void checkForUpdate() {
     if (latestVersion != CURRENT_VERSION) {
       Serial.println("New firmware found!");
 
-      WiFiClient client;
+      WiFiClientSecure client;
+      client.setInsecure();  // skip certificate validation 
+      httpUpdate.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
       t_httpUpdate_return ret = httpUpdate.update(client, firmwareURL);
-
+      Serial.println("WiFiClient client: " + String(client));
+      Serial.println("HTTP Update URL: " + firmwareURL);
+      Serial.println("HTTP Update Result: " + String(ret));
       switch (ret) {
         case HTTP_UPDATE_FAILED:
           Serial.printf("Update failed (%d): %s\n",
@@ -123,7 +127,7 @@ void loop() {
   duration = pulseIn(echoPin, HIGH);
   distanceCm = duration * 0.034 / 2;
 
-  Serial.print("OTA Distance: ");
+  Serial.print("Distance: ");
   Serial.print(distanceCm);
   Serial.println(" cm");
 
