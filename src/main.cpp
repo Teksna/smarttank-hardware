@@ -1,12 +1,8 @@
 #include <Arduino.h>
-#include <WiFi.h>
 #include <LoRaLib.h>
-#include "display/display.h"
-#include "ota/ota.h"
+#include "sensor/ultrasonic.h"
 
-// WIFI
-const char* ssid = "Airtel_mohd_3792";
-const char* password = "Air@28347";
+// LORA
 #define ss 5
 #define rst 14
 #define dio0 2
@@ -14,87 +10,42 @@ const char* password = "Air@28347";
 
 SX1276 lora = new LoRa(ss, dio0, dio1);
 
-// Motor
-const int motorPin = 25;
-bool motorState = false;
-
-// IDs
+// CONFIG
 String TXID = "T001";
-
-
-// TANK
 const int tankHeight = 100;
 
-void setup() {
+// PINS
+const int trigPin = 26;
+const int echoPin = 27;
+
+void setup()
+{
     Serial.begin(115200);
 
-    // Init modules
-    initDisplay();
-    pinMode(motorPin, OUTPUT);
-    digitalWrite(motorPin, LOW);
+    initUltrasonic(trigPin, echoPin);
 
-    // WiFi connect
-    WiFi.begin(ssid, password);
-    Serial.print("Connecting");
-
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-
-    Serial.println("\nConnected!");
-
-    delay(3000);
     Serial.print("Initializing LoRa... ");
 
     int state = lora.begin(865.0, 10.4, 9, 5, 0x12, 17, 100, 8, 6);
 
-    if (state == ERR_NONE) {
-        Serial.println("LoRa OK");
-    } else {
-        Serial.println("LoRa FAIL");
+    if (state == ERR_NONE)
+        Serial.println("OK");
+    else
+    {
+        Serial.println("FAIL");
         while (true);
     }
-    // 🔥 OTA check (only once)
-    checkForOTAUpdate();
 }
-void receiveLoRa()
+
+void loop()
 {
-    String str;
-    int state = lora.receive(str);
+    int capacity = getTankCapacity(tankHeight);
 
-    if (state == ERR_NONE)
-    {
-        Serial.println("Received: " + str);
+    String payload = TXID + "|" + String(capacity);
 
-        int sep = str.indexOf('|');
-        if (sep == -1) return;
+    Serial.println("Sending: " + payload);
 
-        String id = str.substring(0, sep);
-        int capacity = str.substring(sep + 1).toInt();
+    lora.transmit(payload);
 
-        if (id == TXID)
-        {
-            displayStatus(capacity);
-
-            // 🔥 MOTOR LOGIC
-            if (capacity < 20 && !motorState)
-            {
-                digitalWrite(motorPin, HIGH);
-                motorState = true;
-                Serial.println("Motor ON");
-            }
-            else if (capacity > 90 && motorState)
-            {
-                digitalWrite(motorPin, LOW);
-                motorState = false;
-                Serial.println("Motor OFF");
-            }
-        }
-    }
-}
-
-void loop() {
-    receiveLoRa();
-    delay(100);
+    delay(2000);
 }

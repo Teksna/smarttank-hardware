@@ -10,7 +10,7 @@ const char* password = "Air@28347";
 #define ss 5
 #define rst 14
 #define dio0 2
-#define dio1 3
+#define dio1 34
 
 SX1276 lora = new LoRa(ss, dio0, dio1);
 
@@ -58,11 +58,6 @@ void setup() {
     // 🔥 OTA check (only once)
     checkForOTAUpdate();
 }
-int getTankCapacity( int heightlevel) {
-    // This function will be implemented in ultrasonic.cpp
-    // It will return the current tank capacity as an integer percentage (0-100)
-    return 50; // Placeholder value for testing
-}
 void receiveLoRa()
 {
     String str;
@@ -98,41 +93,7 @@ void receiveLoRa()
         }
     }
 }
-void receiveLoRa()
-{
-    String str;
-    int state = lora.receive(str);
 
-    if (state == ERR_NONE)
-    {
-        Serial.println("Received: " + str);
-
-        int sep = str.indexOf('|');
-        if (sep == -1) return;
-
-        String id = str.substring(0, sep);
-        int capacity = str.substring(sep + 1).toInt();
-
-        if (id == TXID)
-        {
-            displayStatus(capacity);
-
-            // 🔥 MOTOR LOGIC
-            if (capacity < 20 && !motorState)
-            {
-                digitalWrite(motorPin, HIGH);
-                motorState = true;
-                Serial.println("Motor ON");
-            }
-            else if (capacity > 90 && motorState)
-            {
-                digitalWrite(motorPin, LOW);
-                motorState = false;
-                Serial.println("Motor OFF");
-            }
-        }
-    }
-}
 void loop() {
     receiveLoRa();
     delay(100);
