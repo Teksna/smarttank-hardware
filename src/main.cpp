@@ -26,7 +26,7 @@ void setup()
 
     Serial.print("Initializing LoRa... ");
 
-    int state = lora.begin(865.0, 10.4, 9, 5, 0x12, 17, 100, 8, 6);
+    int state = lora.begin(865.0, 125.0, 9, 5, 0x12, 17, 100, 8, 6);
 
     if (state == ERR_NONE)
         Serial.println("OK");
