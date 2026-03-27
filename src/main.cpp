@@ -38,7 +38,7 @@ void loop() {
   if (state == RADIOLIB_ERR_NONE) {
     Serial.println("Received!");
 
-    Serial.print("Data: ");
+    Serial.print("Dataa: ");
     Serial.println(str);
 
     Serial.print("RSSI: ");
