@@ -10,7 +10,7 @@
             "includePath": [
                 "C:/Users/Asus/Documents/PlatformIO/Projects/Smarttank-tx-rx/tx/smarttank-hardware/include",
                 "C:/Users/Asus/Documents/PlatformIO/Projects/Smarttank-tx-rx/tx/smarttank-hardware/src",
-                "C:/Users/Asus/Documents/PlatformIO/Projects/Smarttank-tx-rx/tx/smarttank-hardware/.pio/libdeps/az-delivery-devkit-v4/LoRaLib/src",
+                "C:/Users/Asus/Documents/PlatformIO/Projects/Smarttank-tx-rx/tx/smarttank-hardware/.pio/libdeps/az-delivery-devkit-v4/RadioLib/src",
                 "C:/Users/Asus/Documents/PlatformIO/Projects/Smarttank-tx-rx/tx/smarttank-hardware/.pio/libdeps/az-delivery-devkit-v4/Adafruit SH110X",
                 "C:/Users/Asus/Documents/PlatformIO/Projects/Smarttank-tx-rx/tx/smarttank-hardware/.pio/libdeps/az-delivery-devkit-v4/Adafruit GFX Library",
                 "C:/Users/Asus/Documents/PlatformIO/Projects/Smarttank-tx-rx/tx/smarttank-hardware/.pio/libdeps/az-delivery-devkit-v4/Adafruit BusIO",
@@ -250,7 +250,7 @@
                 "path": [
                     "C:/Users/Asus/Documents/PlatformIO/Projects/Smarttank-tx-rx/tx/smarttank-hardware/include",
                     "C:/Users/Asus/Documents/PlatformIO/Projects/Smarttank-tx-rx/tx/smarttank-hardware/src",
-                    "C:/Users/Asus/Documents/PlatformIO/Projects/Smarttank-tx-rx/tx/smarttank-hardware/.pio/libdeps/az-delivery-devkit-v4/LoRaLib/src",
+                    "C:/Users/Asus/Documents/PlatformIO/Projects/Smarttank-tx-rx/tx/smarttank-hardware/.pio/libdeps/az-delivery-devkit-v4/RadioLib/src",
                     "C:/Users/Asus/Documents/PlatformIO/Projects/Smarttank-tx-rx/tx/smarttank-hardware/.pio/libdeps/az-delivery-devkit-v4/Adafruit SH110X",
                     "C:/Users/Asus/Documents/PlatformIO/Projects/Smarttank-tx-rx/tx/smarttank-hardware/.pio/libdeps/az-delivery-devkit-v4/Adafruit GFX Library",
                     "C:/Users/Asus/Documents/PlatformIO/Projects/Smarttank-tx-rx/tx/smarttank-hardware/.pio/libdeps/az-delivery-devkit-v4/Adafruit BusIO",

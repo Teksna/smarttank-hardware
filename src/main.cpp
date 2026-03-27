@@ -1,51 +1,47 @@
-#include <Arduino.h>
-#include <LoRaLib.h>
-#include "sensor/ultrasonic.h"
+#include <RadioLib.h>
 
-// LORA
-#define ss 5
-#define rst 14
-#define dio0 2
-#define dio1 34
+// NSS, DIO0, RESET, DIO1
+SX1276 radio = new Module(5, 2, 14, 3);
 
-SX1276 lora = new LoRa(ss, dio0, dio1);
+int count = 0;
 
-// CONFIG
-String TXID = "T001";
-const int tankHeight = 100;
+void setup() {
+  Serial.begin(9600);
 
-// PINS
-const int trigPin = 26;
-const int echoPin = 27;
+  Serial.print("[SX1276] Initializing ... ");
 
-void setup()
-{
-    Serial.begin(115200);
+  int state = radio.begin(
+    865.0,
+    125.0,
+    9,
+    5,
+    0x12,
+    17,
+    8,
+    0
+  );
 
-    initUltrasonic(trigPin, echoPin);
-
-    Serial.print("Initializing LoRa... ");
-
-    int state = lora.begin(865.0, 125.0, 9, 5, 0x12, 17, 100, 8, 6);
-
-    if (state == ERR_NONE)
-        Serial.println("OK");
-    else
-    {
-        Serial.println("FAIL");
-        while (true);
-    }
+  if (state == RADIOLIB_ERR_NONE) {
+    Serial.println("success!");
+  } else {
+    Serial.print("failed, code ");
+    Serial.println(state);
+    while (true);
+  }
 }
 
-void loop()
-{
-    int capacity = getTankCapacity(tankHeight);
+void loop() {
+  Serial.print("Transmitting... ");
 
-    String payload = TXID + "|" + String(capacity);
+  String str = "Hello #" + String(count++);
+  int state = radio.transmit(str);
 
-    Serial.println("Sending: " + payload);
+  if (state == RADIOLIB_ERR_NONE) {
+    Serial.println("success!");
+  } else {
+    Serial.print("failed, code ");
+    Serial.println(state);
+  }
 
-    lora.transmit(payload);
-
-    delay(2000);
+  delay(1000);
 }
