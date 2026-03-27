@@ -5,7 +5,7 @@
 #include <WiFiClientSecure.h>
 
 // 🔁 Move these from main.cpp
-#define CURRENT_VERSION "v1.0.1"
+#define CURRENT_VERSION "v1.0.0"
 
 static String baseUrl = "https://yljggigahlagdihhycfj.supabase.co";
 static String firmwareEndpoint = baseUrl + "/rest/v1/firmware?select=version,url&order=id.desc&limit=1";
