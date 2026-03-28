@@ -1,7 +1,16 @@
 # smarttank-hardware
 
 
-## Schemas
+## Schema commands
+
+create table firmware (
+  id bigint generated always as identity primary key,
+  version text,
+  url text,
+  description text,
+  created_at timestamp default now()
+);
+
 insert into firmware (version, url, description)
 values (
   'v1.0.1',
