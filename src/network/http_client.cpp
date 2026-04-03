@@ -18,16 +18,24 @@ int HttpClientWrapper::get(String url, String& response, String apiKey) {
     return code;
 }
 
-int HttpClientWrapper::post(String url, String payload, String apiKey) {
+int HttpClientWrapper::post(String url, String payload, String &response, String apiKey) {
     HTTPClient http;
 
     http.begin(url);
     http.addHeader("Content-Type", "application/json");
     http.addHeader("apikey", apiKey);
     http.addHeader("Authorization", "Bearer " + apiKey);
-    http.addHeader("Prefer", "return=minimal");
+
+    // ❌ REMOVE THIS LINE
+    // http.addHeader("Prefer", "return=minimal");
 
     int code = http.POST(payload);
+
+    if (code > 0) {
+        response = http.getString();  // ✅ IMPORTANT
+    } else {
+        response = "";
+    }
 
     http.end();
     return code;

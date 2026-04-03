@@ -104,15 +104,6 @@ void setup() {
 // ---------------- LOOP ----------------
 void loop() {
 
-    //  Fetch supply from cloud every 3 sec
-    if (millis() - lastFetch > 3000) {
-        supplyState = fetchSupplyState();
-        lastFetch = millis();
-
-        Serial.print("Cloud Supply: ");
-        Serial.println(supplyState);
-    }
-
     LoRaPacket pkt = receiveLoRa();
 
     if (pkt.state == RADIOLIB_ERR_NONE) {
@@ -135,15 +126,11 @@ void loop() {
         displayStatus(capacity, rssi);
 
         // ---------------- MOTOR LOGIC ----------------
-        // ---------------- MOTOR LOGIC ----------------
         if (!supplyState) {
-            // ❌ Supply OFF → always OFF
             Serial.println("Supply OFF - Motor OFF");
             digitalWrite(motorPin, LOW);
             motorState = false;
-        }
-        else {
-            // ✅ Supply ON → fill tank
+        } else {
             if (capacity < 90) {
                 Serial.println("Supply ON - Motor ON");
                 digitalWrite(motorPin, HIGH);
@@ -155,10 +142,23 @@ void loop() {
             }
         }
 
-        // ---------------- SEND DATA ----------------
-        if (millis() - lastUpload > 5000) {
-            Serial.println("Uploading data to Supabase...");
-            updateDeviceState(capacity, motorState, rssi);
+        // ---------------- CLOUD SYNC ----------------
+        unsigned long interval;
+
+        if (motorState) {
+            interval = 5000;  // 5 sec when motor ON
+        } else {
+            interval = 10000;  // 10 sec when motor OFF
+        }
+
+        if (millis() - lastUpload > interval) {
+            Serial.println("Syncing with Supabase (RPC)...");
+
+            supplyState = updateAndFetchSupply(capacity, motorState, rssi);
+
+            Serial.print("Cloud Supply: ");
+            Serial.println(supplyState);
+
             lastUpload = millis();
         }
     }
