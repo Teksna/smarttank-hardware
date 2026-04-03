@@ -1,17 +1,17 @@
+
 #include "ota.h"
 #include <WiFi.h>
-#include <HTTPClient.h>
-#include <HTTPUpdate.h>
 #include <WiFiClientSecure.h>
+#include <HTTPUpdate.h>
+#include "../network/http_client.h"
 
-// 🔁 Move these from main.cpp
+// ---------------- CONFIG ----------------
 #define CURRENT_VERSION "v1.0.0"
 
 static String baseUrl = "https://yljggigahlagdihhycfj.supabase.co";
 static String firmwareEndpoint = baseUrl + "/rest/v1/firmware?select=version,url&order=id.desc&limit=1";
 
-String anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlsamdnaWdhaGxhZ2RpaGh5Y2ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MDcwNTMsImV4cCI6MjA4ODI4MzA1M30.NeGRlQv-T-OGW4iqJPLV2T-2uPQxDNz0r9GHLAG8F-g";
-
+static String anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlsamdnaWdhaGxhZ2RpaGh5Y2ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MDcwNTMsImV4cCI6MjA4ODI4MzA1M30.NeGRlQv-T-OGW4iqJPLV2T-2uPQxDNz0r9GHLAG8F-g";
 // ---------- INTERNAL JSON PARSER ----------
 static String extractValue(String payload, String key) {
     int start = payload.indexOf(key);
@@ -25,23 +25,24 @@ static String extractValue(String payload, String key) {
 
 // ---------- OTA FUNCTION ----------
 void checkForOTAUpdate() {
-    HTTPClient http;
+
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("WiFi not connected. Skipping OTA.");
+        return;
+    }
 
     Serial.println("Checking for firmware...");
 
-    http.begin(firmwareEndpoint);
-    http.addHeader("apikey", anonKey);
-
-    int httpCode = http.GET();
+    String payload;
+    int httpCode = HttpClientWrapper::get(firmwareEndpoint, payload, anonKey);
 
     if (httpCode == 200) {
-        String payload = http.getString();
 
         Serial.println("Response:");
         Serial.println(payload);
 
         String latestVersion = extractValue(payload, "version");
-        String firmwareURL = extractValue(payload, "url");
+        String firmwareURL  = extractValue(payload, "url");
 
         Serial.print("Latest Version: ");
         Serial.println(latestVersion);
@@ -49,17 +50,25 @@ void checkForOTAUpdate() {
         Serial.print("Current Version: ");
         Serial.println(CURRENT_VERSION);
 
+        if (latestVersion.length() == 0 || firmwareURL.length() == 0) {
+            Serial.println("Invalid firmware data");
+            return;
+        }
+
         if (latestVersion != CURRENT_VERSION) {
+
             Serial.println("New firmware found!");
 
             WiFiClientSecure client;
-            client.setInsecure();
+            client.setInsecure();              // ⚠️ for HTTPS without cert
+            client.setTimeout(15000);          // prevent hangs
 
             httpUpdate.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
 
             t_httpUpdate_return ret = httpUpdate.update(client, firmwareURL);
 
             switch (ret) {
+
                 case HTTP_UPDATE_FAILED:
                     Serial.printf("Update failed (%d): %s\n",
                         httpUpdate.getLastError(),
@@ -67,11 +76,11 @@ void checkForOTAUpdate() {
                     break;
 
                 case HTTP_UPDATE_NO_UPDATES:
-                    Serial.println("No updates");
+                    Serial.println("No updates available");
                     break;
 
                 case HTTP_UPDATE_OK:
-                    Serial.println("Update success!");
+                    Serial.println("Update success! Rebooting...");
                     break;
             }
 
@@ -80,8 +89,7 @@ void checkForOTAUpdate() {
         }
 
     } else {
-        Serial.printf("HTTP error: %d\n", httpCode);
+        Serial.print("HTTP error: ");
+        Serial.println(httpCode);
     }
-
-    http.end();
 }
