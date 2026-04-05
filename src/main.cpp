@@ -108,7 +108,29 @@ void loop() {
 
     if (pkt.state == RADIOLIB_ERR_NONE) {
 
-        int distance = pkt.data.toInt();
+        int distance = -1;
+        float batteryVoltage = 0.0;
+        int batteryPercent = 0;
+
+        // Parse CSV
+        int firstComma = pkt.data.indexOf(',');
+        int secondComma = pkt.data.indexOf(',', firstComma + 1);
+
+        if (firstComma > 0 && secondComma > firstComma) {
+            distance = pkt.data.substring(0, firstComma).toInt();
+            batteryVoltage = pkt.data.substring(firstComma + 1, secondComma).toFloat();
+            batteryPercent = pkt.data.substring(secondComma + 1).toInt();
+        }
+
+        // Debug
+        Serial.print("Distance: ");
+        Serial.println(distance);
+
+        Serial.print("Battery Voltage: ");
+        Serial.println(batteryVoltage);
+
+        Serial.print("Battery %: ");
+        Serial.println(batteryPercent);
 
         float waterLevel = tankHeight - distance;
         int capacity = (waterLevel / tankHeight) * 100;
@@ -154,7 +176,7 @@ void loop() {
         if (millis() - lastUpload > interval) {
             Serial.println("Syncing with Supabase (RPC)...");
 
-            supplyState = updateAndFetchSupply(capacity, motorState, rssi);
+            supplyState = updateAndFetchSupply(capacity, motorState, rssi, batteryPercent);
 
             Serial.print("Cloud Supply: ");
             Serial.println(supplyState);

@@ -14,7 +14,7 @@ void supabaseInit(const char* url, const char* key) {
     SUPABASE_KEY = String(key);
 }
 
-bool updateAndFetchSupply(int tank, bool motor, int rssi) {
+bool updateAndFetchSupply(int tank, bool motor, int rssi, int battery) {
 
     if (WiFi.status() != WL_CONNECTED) return false;
 
@@ -23,7 +23,8 @@ bool updateAndFetchSupply(int tank, bool motor, int rssi) {
     String payload = "{";
     payload += "\"p_device_uid\":\"" + DEVICE_ID + "\",";
     payload += "\"p_tank_level\":" + String(tank) + ",";
-    payload += "\"p_motor_state\":" + String(motor ? "true" : "false");
+    payload += "\"p_motor_state\":" + String(motor ? "true" : "false") + ",";
+    payload += "\"p_battery_level\":" + String(battery);
     payload += "}";
 
     String response;

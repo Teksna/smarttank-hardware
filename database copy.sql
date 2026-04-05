@@ -152,3 +152,21 @@ values (
   false,
   0
 );
+
+--
+create or replace function log_battery_change()
+returns trigger as $$
+begin
+  if new.battery_level is distinct from old.battery_level then
+    insert into battery_logs (device_id, battery_level)
+    values (new.id, new.battery_level);
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+---
+
+create trigger trigger_battery_log
+after update on devices
+for each row
+execute function log_battery_change();
