@@ -1,38 +1,45 @@
 #include <RadioLib.h>
 
-// NSS, DIO0, RESET, DIO1
+// -------- LoRa Pins --------
 #define ss 5
 #define rst 14
 #define dio0 2
 #define dio1 3
-#define echoPin 27  // attach pin D2 Arduino to pin Echo of HC-SR04
-#define trigPin 26 //attach pin D3 Arduino to pin Trig of HC-SR04
 
-// defines variables
-long duration; // variable for the duration of sound wave travel
-int distance;
+// -------- Pins --------
+#define batteryin 34
+#define echoPin 27
+#define trigPin 26
+
 SX1276 radio = new Module(ss, dio0, rst, dio1);
 
-int count = 0;
+// Divider ratio (220k + 100k)
+#define DIVIDER_RATIO 3.2
 
+long duration;
+
+// -------- SETUP --------
 void setup() {
-  
-  pinMode(trigPin, OUTPUT); // Sets the trigPin as an OUTPUT
+  Serial.begin(115200);
+
+  pinMode(trigPin, OUTPUT);
   pinMode(echoPin, INPUT);
-  Serial.begin(9600);
-  Serial.begin(9600);
+  pinMode(batteryin, INPUT);
+
+  // Improve ADC range
+  analogSetAttenuation(ADC_11db);
 
   Serial.print("[SX1276] Initializing ... ");
 
   int state = radio.begin(
-    865.0,
-    125.0,
-    9,
-    5,
-    0x12,
-    17,
-    8,
-    0
+    865.0,   // Frequency
+    125.0,   // Bandwidth
+    9,       // SF
+    5,       // CR
+    0x12,    // Sync word
+    17,      // Power
+    8,       // Preamble
+    0        // Gain
   );
 
   if (state == RADIOLIB_ERR_NONE) {
@@ -43,39 +50,97 @@ void setup() {
     while (true);
   }
 }
-String dist()
-{
+
+// -------- DISTANCE --------
+int readDistance() {
   digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
-  // Sets the trigPin HIGH (ACTIVE) for 10 microseconds
+
   digitalWrite(trigPin, HIGH);
   delayMicroseconds(10);
   digitalWrite(trigPin, LOW);
-  // Reads the echoPin, returns the sound wave travel time in microseconds
-  duration = pulseIn(echoPin, HIGH);
-  // Calculating the distance
-  distance = duration * 0.034 / 2; // Speed of sound wave divided by 2 (go and back)
-  // Displays the distance on the Serial Monitor
-  Serial.print("Distance: ");
-  Serial.print(distance);
-  Serial.println(" cm");
-  return (String)distance;
 
+  duration = pulseIn(echoPin, HIGH, 30000); // timeout
+
+  int dist = duration * 0.034 / 2;
+
+  if (dist <= 0 || dist > 1000) return -1;
+
+  return dist;
 }
-void loop() {
-  Serial.print("Transmitting... ");
 
-  // String str = "Hello #" + String(count++);
-  String capacity = dist();
-  Serial.print("Distance :"+capacity);
-  int state = radio.transmit(capacity);
+// -------- BATTERY RAW (AVERAGED) --------
+int readBatteryRaw() {
+  int sum = 0;
+
+  for (int i = 0; i < 10; i++) {
+    sum += analogRead(batteryin);
+    delay(5);
+  }
+
+  return sum / 10;
+}
+
+// -------- BATTERY VOLTAGE --------
+float readBatteryVoltage() {
+  int raw = readBatteryRaw();
+
+  float v_adc = raw * (3.3 / 4095.0);
+
+  float v_battery = v_adc * DIVIDER_RATIO;
+
+  return v_battery;
+}
+
+// -------- BATTERY % (1–100 SCALE) --------
+int batteryPercent(float voltage) {
+  float v_min = 6.4;
+  float v_max = 8.4;
+
+  float percent = ((voltage - v_min) / (v_max - v_min)) * 100.0;
+
+  if (percent > 100) percent = 100;
+  if (percent < 0) percent = 0;
+
+  return (int)(percent + 0.5); // round
+}
+
+// -------- LOOP --------
+void loop() {
+
+  Serial.println("Transmitting...");
+
+  int distance = readDistance();
+  float battery = readBatteryVoltage();
+  int percent = batteryPercent(battery);
+
+  Serial.print("Distance: ");
+  Serial.println(distance);
+
+  Serial.print("Battery Voltage: ");
+  Serial.println(battery);
+
+  Serial.print("Battery %: ");
+  Serial.println(percent);
+
+  // -------- Payload --------
+  String payload = String(distance) + "," +
+                   String(battery, 2) + "," +
+                   String(percent);
+
+  Serial.print("Payload: ");
+  Serial.println(payload);
+
+  int state = radio.transmit(payload);
 
   if (state == RADIOLIB_ERR_NONE) {
-    Serial.println("success!");
+    Serial.println("LoRa TX success!");
   } else {
     Serial.print("failed, code ");
     Serial.println(state);
   }
 
-  delay(1000);
+  Serial.println("----------------------");
+
+  delay(5000);  // change later to deep sleep
 }
