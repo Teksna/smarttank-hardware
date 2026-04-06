@@ -145,7 +145,7 @@ void loop() {
         Serial.print(" % | RSSI: ");
         Serial.println(rssi);
 
-        displayStatus(capacity, rssi);
+        displayStatus(capacity, rssi, batteryPercent);
 
         // ---------------- MOTOR LOGIC ----------------
         if (!supplyState) {

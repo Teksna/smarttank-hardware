@@ -11,7 +11,7 @@ void initDisplay() {
     display.display();
 }
 
-void displayStatus(int capacity, int rssi)
+void displayStatus(int capacity, int rssi, int batteryPercent)
 {
     display.clearDisplay();
     display.setTextSize(1);
@@ -28,7 +28,7 @@ void displayStatus(int capacity, int rssi)
     display.drawLine(40, 1, 60, 11, SH110X_WHITE);
     display.drawLine(1, 11, 59, 11, SH110X_WHITE);
 
-    display.drawLine(85, 52, display.width(), 52, SH110X_WHITE);
+    
     display.display();
 
     // Header
@@ -43,11 +43,11 @@ void displayStatus(int capacity, int rssi)
 
     // Adjust alignment
     if(capacity < 10) {
-        display.setCursor(84, 46);
+        display.setCursor(84, 44);
     } else if (capacity < 100) {
-        display.setCursor(72, 46);
+        display.setCursor(72, 44);
     } else {
-        display.setCursor(60, 46);
+        display.setCursor(60, 44);
     }
 
     display.print(capacity);
@@ -74,18 +74,24 @@ void displayStatus(int capacity, int rssi)
   display.setCursor(0,54);
   display.print("Not Connected");
   }*/
-  
-  display.fillRect(65, 52, 64, 20,1);
-  display.setCursor(68,54);
+  // ---------------- RSSI & BATTERY ----------------
+  display.drawLine(65, 50, display.width(), 50, SH110X_WHITE);
+
+  display.fillRect(65, 52, 8, 20,1);
+  display.setCursor(66,54);
   display.setTextColor(SH110X_BLACK);   
-  display.println("RSSI: ");
-  
-//   display.drawLine(102, 52, 102, display.height(), SH110X_WHITE);
-//   display.drawLine(112, 52, display.width(), 52, SH110X_WHITE);
-  
-  display.setTextColor(SH110X_BLACK);
-  display.setCursor(104,54);
-  //display.print("\nRSSI ");
+  display.println("S:");
+  display.setTextColor(SH110X_WHITE);
+  display.setCursor(74,54);
   display.println(rssi);
+  display.display();
+
+  display.fillRect(99, 55, 7, 20,1);
+  display.fillRect(100, 52, 5, 2,1);
+  display.setCursor(108,54);
+  display.print(batteryPercent);
+  display.setFont();
+  display.setTextSize(1);
+  display.print("%");
   display.display();
 }

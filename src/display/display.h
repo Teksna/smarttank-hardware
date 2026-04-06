@@ -4,6 +4,6 @@
 #include <Adafruit_SH110X.h>
 
 void initDisplay();
-void displayStatus(int capacity, int rssi);
+void displayStatus(int capacity, int rssi, int batteryPercent);
 
 #endif
