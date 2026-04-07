@@ -6,10 +6,14 @@
 #include "../network/http_client.h"
 
 // ---------------- CONFIG ----------------
-#define CURRENT_VERSION "v1.0.0"
-
+#define CURRENT_VERSION "v1.0.1"
+#define DEVICE_UID "tank1"
 static String baseUrl = "https://yljggigahlagdihhycfj.supabase.co";
-static String firmwareEndpoint = baseUrl + "/rest/v1/firmware?select=version,url&order=id.desc&limit=1";
+// static String firmwareEndpoint = baseUrl + "/rest/v1/firmware?select=version,url&order=id.desc&limit=1";
+static String deviceEndpoint = baseUrl + 
+"/rest/v1/devices?device_uid=eq." + String(DEVICE_UID) + 
+"&select=target_firmware,firmware_url";
+
 
 static String anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlsamdnaWdhaGxhZ2RpaGh5Y2ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MDcwNTMsImV4cCI6MjA4ODI4MzA1M30.NeGRlQv-T-OGW4iqJPLV2T-2uPQxDNz0r9GHLAG8F-g";
 // ---------- INTERNAL JSON PARSER ----------
@@ -34,15 +38,15 @@ void checkForOTAUpdate() {
     Serial.println("Checking for firmware...");
 
     String payload;
-    int httpCode = HttpClientWrapper::get(firmwareEndpoint, payload, anonKey);
+    int httpCode = HttpClientWrapper::get(deviceEndpoint, payload, anonKey);
 
     if (httpCode == 200) {
 
         Serial.println("Response:");
         Serial.println(payload);
 
-        String latestVersion = extractValue(payload, "version");
-        String firmwareURL  = extractValue(payload, "url");
+        String latestVersion = extractValue(payload, "target_firmware");
+        String firmwareURL  = extractValue(payload, "firmware_url");
 
         Serial.print("Latest Version: ");
         Serial.println(latestVersion);
@@ -51,7 +55,7 @@ void checkForOTAUpdate() {
         Serial.println(CURRENT_VERSION);
 
         if (latestVersion.length() == 0 || firmwareURL.length() == 0) {
-            Serial.println("Invalid firmware data");
+            Serial.println("No OTA assigned");
             return;
         }
 
@@ -87,6 +91,10 @@ void checkForOTAUpdate() {
         } else {
             Serial.println("Already up to date");
         }
+        //         HttpClientWrapper::patch(
+        // "/devices?device_uid=eq.tank1",
+        // "{ \"firmware_version\": \"v1.0.1\", \"ota_status\": \"success\" }"
+        // );
 
     } else {
         Serial.print("HTTP error: ");
