@@ -12,6 +12,7 @@ static String baseUrl = "https://yljggigahlagdihhycfj.supabase.co";
 // static String firmwareEndpoint = baseUrl + "/rest/v1/firmware?select=version,url&order=id.desc&limit=1";
 static String deviceEndpoint = baseUrl + 
 "/rest/v1/devices?device_uid=eq." + String(DEVICE_UID) + 
+
 "&select=target_firmware,firmware_url";
 
 

@@ -14,11 +14,14 @@ void supabaseInit(const char* url, const char* key) {
     SUPABASE_KEY = String(key);
 }
 
-bool updateAndFetchSupply(int tank, bool motor, int rssi, int battery) {
 
-    if (WiFi.status() != WL_CONNECTED) return false;
+CloudResponse OTAupdateAndFetchSupply(int tank, bool motor, int rssi, int battery) {
 
-    String url = SUPABASE_URL + "/rest/v1/rpc/update_device_and_get_supply";
+    CloudResponse result = {false, false};
+
+    if (WiFi.status() != WL_CONNECTED) return result;
+
+    String url = SUPABASE_URL + "/rest/v1/rpc/ota_update_device_and_get_supply";
 
     String payload = "{";
     payload += "\"p_device_uid\":\"" + DEVICE_ID + "\",";
@@ -32,51 +35,16 @@ bool updateAndFetchSupply(int tank, bool motor, int rssi, int battery) {
 
     Serial.println("RPC Response: " + response);
 
-    if (code == 200 && response.indexOf("\"supply_state\":true") >= 0) {
-        return true;
+    if (code == 200) {
+
+        if (response.indexOf("\"supply_state\":true") >= 0) {
+            result.supply = true;
+        }
+
+        if (response.indexOf("\"ota_status\":true") >= 0) {
+            result.ota = true;
+        }
     }
 
-    return false;
+    return result;
 }
-// // 🔹 Fetch supply_state from devices table
-// bool fetchSupplyState() {
-
-//     if (WiFi.status() != WL_CONNECTED) return cloudSupply;
-
-//     String response;
-
-//     String url = SUPABASE_URL +
-//   "/rest/v1/supply_stations?id=eq." + STATION_ID +
-//   "&select=supply_state&limit=1";
-
-//     int code = HttpClientWrapper::get(url, response, SUPABASE_KEY);
-//     // get the result and update cloudSupply
-//     Serial.println("HTTP GET response code: " + String(code));
-//     // extract response
-//     Serial.println("HTTP GET response: " + response);
-    
-//     if (code == 200 && response.length() > 0) {
-//         cloudSupply = (response.indexOf("\"supply_state\":true") >= 0);
-//     }
-
-//     Serial.println("Fetched supply state: " + String(cloudSupply ? "true" : "false"));
-//     return cloudSupply;
-// }
-
-// // 🔹 Update device (THIS triggers logs automatically)
-// void updateDeviceState(int tank, bool motor, int rssi) {
-
-//     if (WiFi.status() != WL_CONNECTED) return;
-
-//     String url = SUPABASE_URL +
-//         "/rest/v1/devices?device_uid=eq." + DEVICE_ID;
-
-//     String payload = "{";
-//     payload += "\"tank_level_percent\":" + String(tank) + ",";
-//     payload += "\"motor_state\":" + String(motor ? "true" : "false");
-//     payload += "}";
-
-//     HttpClientWrapper::patch(url, payload, SUPABASE_KEY);
-//         //Serial.println("HTTP PATCH payload: " + payload);
-//         //
-// }

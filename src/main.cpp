@@ -23,7 +23,8 @@ const char* supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 SX1276 radio = new Module(ss, dio0, rst, dio1);
 
 // ---------------- MOTOR ----------------
-const int motorPin = 25;
+const int motorPin_no = 27; // GPIO pin to control the motor (normally open relay)
+const int motorPin_nc = 26; // GPIO pin to control the motor (normally closed relay)
 bool motorState = false;
 
 // ---------------- TANK ----------------
@@ -58,8 +59,13 @@ void setup() {
 
     initDisplay();
 
-    pinMode(motorPin, OUTPUT);
-    digitalWrite(motorPin, LOW);
+    pinMode(motorPin_no, OUTPUT);
+    pinMode(motorPin_nc, OUTPUT);
+    digitalWrite(motorPin_nc, LOW); // Ensure normally closed relay is active to keep motor off
+    delay(2000); // brief delay to ensure relay state change
+    digitalWrite(motorPin_no, LOW); // Ensure normally open relay is inactive to keep motor off
+    Serial.println("Motor Pins Initialized");
+    delay(1000);
 
     // WiFi
     WiFi.begin(ssid, password);
@@ -150,16 +156,24 @@ void loop() {
         // ---------------- MOTOR LOGIC ----------------
         if (!supplyState) {
             Serial.println("Supply OFF - Motor OFF");
-            digitalWrite(motorPin, LOW);
+            digitalWrite(motorPin_no, LOW); // Ensure normally open relay is inactive to keep motor off
+            delay(1000); // brief delay to ensure relay state change
+            digitalWrite(motorPin_nc, LOW); // Ensure normally closed relay is active to keep motor off
+            delay(1000); // brief delay to ensure relay state change
             motorState = false;
         } else {
             if (capacity < 90) {
                 Serial.println("Supply ON - Motor ON");
-                digitalWrite(motorPin, HIGH);
+                digitalWrite(motorPin_nc, LOW); // Activate normally closed relay
+                delay(1000); // brief delay to ensure relay state change
+                digitalWrite(motorPin_no, HIGH); // Activate normally open relay
+                            
                 motorState = true;
             } else {
                 Serial.println("Tank Full - Motor OFF");
-                digitalWrite(motorPin, LOW);
+                digitalWrite(motorPin_no, LOW); // Deactivate normally open relay
+                delay(1000); // brief delay to ensure relay state change
+                digitalWrite(motorPin_nc, LOW); // Keep normally closed relay active to ensure motor is off
                 motorState = false;
             }
         }
@@ -176,7 +190,16 @@ void loop() {
         if (millis() - lastUpload > interval) {
             Serial.println("Syncing with Supabase (RPC)...");
 
-            supplyState = updateAndFetchSupply(capacity, motorState, rssi, batteryPercent);
+            CloudResponse cloud = OTAupdateAndFetchSupply(capacity, motorState, rssi, batteryPercent);
+
+            supplyState = cloud.supply;
+
+            if (cloud.ota) {
+                Serial.println("OTA Trigger received → Rebooting...");
+
+                delay(1000);
+                ESP.restart();   // 🔥 remote reboot
+            }
 
             Serial.print("Cloud Supply: ");
             Serial.println(supplyState);

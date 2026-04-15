@@ -80,7 +80,7 @@ void displayStatus(int capacity, int rssi, int batteryPercent)
   display.fillRect(65, 52, 8, 20,1);
   display.setCursor(66,54);
   display.setTextColor(SH110X_BLACK);   
-  display.println("I:");
+  display.println("S:");
   display.setTextColor(SH110X_WHITE);
   display.setCursor(74,54);
   display.println(rssi);
