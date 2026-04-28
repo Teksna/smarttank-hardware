@@ -34,6 +34,7 @@ const int tankHeight = 100;
 unsigned long lastFetch = 0;
 unsigned long lastUpload = 0;
 bool supplyState = false;
+bool motorAutomationState = false;
 
 // ---------------- STRUCT ----------------
 struct LoRaPacket {
@@ -118,7 +119,7 @@ void loop() {
         float batteryVoltage = 0.0;
         int batteryPercent = 0;
 
-        // Parse CSV
+        // ---------------- PARSE DATA ----------------
         int firstComma = pkt.data.indexOf(',');
         int secondComma = pkt.data.indexOf(',', firstComma + 1);
 
@@ -128,16 +129,12 @@ void loop() {
             batteryPercent = pkt.data.substring(secondComma + 1).toInt();
         }
 
-        // Debug
-        Serial.print("Distance: ");
-        Serial.println(distance);
+        // ---------------- DEBUG ----------------
+        Serial.print("Distance: "); Serial.println(distance);
+        Serial.print("Battery Voltage: "); Serial.println(batteryVoltage);
+        Serial.print("Battery %: "); Serial.println(batteryPercent);
 
-        Serial.print("Battery Voltage: ");
-        Serial.println(batteryVoltage);
-
-        Serial.print("Battery %: ");
-        Serial.println(batteryPercent);
-
+        // ---------------- CALCULATE LEVEL ----------------
         float waterLevel = tankHeight - distance;
         int capacity = (waterLevel / tankHeight) * 100;
 
@@ -153,58 +150,92 @@ void loop() {
 
         displayStatus(capacity, rssi, batteryPercent);
 
-        // ---------------- MOTOR LOGIC ----------------
-        if (!supplyState) {
-            Serial.println("Supply OFF - Motor OFF");
-            digitalWrite(motorPin_no, LOW); // Ensure normally open relay is inactive to keep motor off
-            delay(1000); // brief delay to ensure relay state change
-            digitalWrite(motorPin_nc, LOW); // Ensure normally closed relay is active to keep motor off
-            delay(1000); // brief delay to ensure relay state change
-            motorState = false;
-        } else {
-            if (capacity < 90) {
-                Serial.println("Supply ON - Motor ON");
-                digitalWrite(motorPin_nc, LOW); // Activate normally closed relay
-                delay(1000); // brief delay to ensure relay state change
-                digitalWrite(motorPin_no, HIGH); // Activate normally open relay
-                            
-                motorState = true;
-            } else {
-                Serial.println("Tank Full - Motor OFF");
-                digitalWrite(motorPin_no, LOW); // Deactivate normally open relay
-                delay(1000); // brief delay to ensure relay state change
-                digitalWrite(motorPin_nc, LOW); // Keep normally closed relay active to ensure motor is off
-                motorState = false;
-            }
-        }
-
-        // ---------------- CLOUD SYNC ----------------
-        unsigned long interval;
-
-        if (motorState) {
-            interval = 5000;  // 5 sec when motor ON
-        } else {
-            interval = 10000;  // 10 sec when motor OFF
-        }
+        // ---------------- CLOUD SYNC (FIRST) ----------------
+        unsigned long interval = motorState ? 5000 : 10000;
 
         if (millis() - lastUpload > interval) {
+
             Serial.println("Syncing with Supabase (RPC)...");
 
-            CloudResponse cloud = OTAupdateAndFetchSupply(capacity, motorState, rssi, batteryPercent);
+            CloudResponse cloud = ota_device_update_and_fetch(
+                capacity,
+                motorState,
+                rssi,
+                batteryPercent
+            );
 
+            // 🔥 Update cloud-driven states FIRST
             supplyState = cloud.supply;
+            motorAutomationState = cloud.motorAutomation;
 
             if (cloud.ota) {
                 Serial.println("OTA Trigger received → Rebooting...");
-
                 delay(1000);
-                ESP.restart();   // 🔥 remote reboot
+                ESP.restart();
             }
 
             Serial.print("Cloud Supply: ");
             Serial.println(supplyState);
 
+            Serial.print("Automation: ");
+            Serial.println(motorAutomationState);
+
             lastUpload = millis();
+        }
+
+        // ---------------- WIFI FAILSAFE ----------------
+        if (WiFi.status() != WL_CONNECTED) {
+            Serial.println("WiFi LOST → Motor OFF (FAILSAFE)");
+
+            digitalWrite(motorPin_no, LOW);
+            digitalWrite(motorPin_nc, LOW);
+
+            motorState = false;
+        }
+
+        // ---------------- MOTOR LOGIC ----------------
+        else if (!motorAutomationState) {
+
+            Serial.println("Automation OFF → Motor OFF");
+
+            digitalWrite(motorPin_no, LOW);
+            delay(1000);
+            digitalWrite(motorPin_nc, LOW);
+
+            motorState = false;
+
+        } else if (!supplyState) {
+
+            Serial.println("Supply OFF → Motor OFF");
+
+            digitalWrite(motorPin_no, LOW);
+            delay(1000);
+            digitalWrite(motorPin_nc, LOW);
+
+            motorState = false;
+
+        } else {
+
+            if (capacity < 90) {
+
+                Serial.println("AUTO ON → Motor ON");
+
+                digitalWrite(motorPin_nc, LOW);
+                delay(1000);
+                digitalWrite(motorPin_no, HIGH);
+
+                motorState = true;
+
+            } else {
+
+                Serial.println("Tank Full → Motor OFF");
+
+                digitalWrite(motorPin_no, LOW);
+                delay(1000);
+                digitalWrite(motorPin_nc, LOW);
+
+                motorState = false;
+            }
         }
     }
 
