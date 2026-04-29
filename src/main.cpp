@@ -28,7 +28,6 @@ const int motorPin_nc = 26; // GPIO pin to control the motor (normally closed re
 bool motorState = false;
 
 // ---------------- TANK ----------------
-const int tankHeight = 100;
 
 // ---------------- TIMERS ----------------
 unsigned long lastFetch = 0;
@@ -109,60 +108,23 @@ void setup() {
 }
 
 
-#define FILTER_SIZE 1
-#define MAX_VARIATION 20   // 🔥 relaxed (was 10)
-#define SENSOR_MAX_PERCENT 75  // 🔥 calibrated max level to avoid false overflow (was 85)
 
-int readings[FILTER_SIZE] = {0};
-int readIndex = 0;
-bool bufferFilled = false;
-bool hasValidReading = false;
+#define SENSOR_MAX_PERCENT 80  // 🔥 calibrated max level to avoid false overflow (was 85)
+
+int FULL = 19;     // tank full
+int EMPTY = 120;   // tank empty (adjust)
 int lastStableLevel = 0;
 int stableCount = 0;
-int getFilteredLevel(int newValue) {
+int calculateWaterLevel(int distance) {
 
-    static int lastValid = -1;
-    static bool initialized = false;
+  
 
-    // ---------------- BASIC VALIDATION ----------------
-    if (newValue <= 0 || newValue > 100) {
-        Serial.println("⚠️ Invalid value → ignored");
-        return initialized ? lastValid : 50;
-    }
+  if (distance <= FULL) return 100;
+  if (distance >= EMPTY) return 0;
 
-    // ---------------- FIRST VALUE ----------------
-    if (!initialized) {
-        lastValid = newValue;
-        initialized = true;
+  float percent = (float)(EMPTY - distance) * 100.0 / (EMPTY - FULL);
 
-        readings[readIndex] = newValue;
-        readIndex = (readIndex + 1) % FILTER_SIZE;
-
-        return newValue;
-    }
-
-    // ---------------- ADD TO BUFFER ----------------
-    readings[readIndex] = newValue;
-    readIndex = (readIndex + 1) % FILTER_SIZE;
-
-    if (readIndex == 0) bufferFilled = true;
-
-    int sum = 0;
-    int count = bufferFilled ? FILTER_SIZE : readIndex;
-
-    for (int i = 0; i < count; i++) {
-        sum += readings[i];
-    }
-
-    int avg = sum / count;
-
-    // ---------------- SAFETY ----------------
-    if (avg <= 0 || avg > 100) {
-        return lastValid;
-    }
-
-    lastValid = avg;
-    return lastValid;
+  return (int)(percent + 0.5);
 }
 void loop() {
 
@@ -198,27 +160,9 @@ void loop() {
     Serial.print("Distance: ");
     Serial.println(distance);
 
-    // ---------------- VALIDATION ----------------
-    if (distance <= 0 || distance > tankHeight) {
-        Serial.println("⚠️ Invalid distance → ignored");
-        return;
-    }
 
-    // ---------------- LEVEL CALC ----------------
-    float waterHeight = tankHeight - distance;
+     int water_level = calculateWaterLevel(distance);
 
-    int rawLevel = (waterHeight / tankHeight) * 100;
-    rawLevel = constrain(rawLevel, 0, 100);
-
-    int calibrated = (rawLevel * 100) / SENSOR_MAX_PERCENT;
-    calibrated = constrain(calibrated, 0, 100);
-
-    int water_level = getFilteredLevel(calibrated);
-
-    if (water_level <= 0) {
-        Serial.println("⚠️ Invalid 0% → ignored");
-        return;
-    }
 
     // ---------------- INITIALIZE ----------------
     if (!initialized) {
@@ -266,7 +210,7 @@ void loop() {
     displayStatus(control_level, rssi, batteryPercent);
 
     // ---------------- CLOUD ----------------
-    unsigned long interval = motorState ? 5000 : 10000;
+    unsigned long interval = motorState ? 3000 : 3000;
 
     if (millis() - lastUpload > interval) {
 
@@ -283,6 +227,8 @@ void loop() {
         overflowThreshold = (cloud.overflowThreshold > 0)
                             ? cloud.overflowThreshold
                             : 90;
+        
+        EMPTY = overflowThreshold; 
 
         if (cloud.ota) {
             delay(1000);
@@ -293,12 +239,12 @@ void loop() {
     }
 
     // ---------------- HYSTERESIS ----------------
-    int lowerBound = max(0, overflowThreshold - 5);
-    int upperBound = min(100, overflowThreshold + 3);
+    int lowerBound = max(0, overflowThreshold );
+    int upperBound = min(100, overflowThreshold);
 
     if (motorAutomationState && supplyState) {
 
-        if (control_level < lowerBound) {
+        if (control_level < 30) {
             motorDecisionState = true;
         }
         else if (control_level > upperBound) {
@@ -321,8 +267,6 @@ void loop() {
 
         Serial.println("Motor ON");
 
-        digitalWrite(motorPin_no, LOW);
-        digitalWrite(motorPin_nc, LOW);
         delay(200);
         digitalWrite(motorPin_no, HIGH);
 
@@ -333,7 +277,7 @@ void loop() {
         Serial.println("Motor OFF");
 
         digitalWrite(motorPin_no, LOW);
-        digitalWrite(motorPin_nc, LOW);
+        
 
         motorState = false;
     }
