@@ -254,3 +254,62 @@ add column motor_automation boolean default true
 
 alter table devices
 add column rssi integer;
+
+alter table devices
+add column overflow_height integer default 90;
+============================== NEW FUNCTION TO UPDATE DEVICE AND RETURN SUPPLY + OTA + MOTOR AUTOMATION + OVERFLOW HEIGHT
+create or replace function ota_update_device_and_get_supply_automation_height(
+  p_device_uid text,
+  p_tank_level int,
+  p_motor_state boolean,
+  p_battery_level numeric,
+  p_rssi integer
+)
+returns table (
+  supply_state boolean,
+  ota_status boolean,
+  motor_automation boolean,
+  overflow_height integer
+)
+language plpgsql
+as $$
+declare
+  v_ota boolean;
+  v_motor_automation boolean;
+  v_overflow integer;
+begin
+
+  -- 🔵 Update device state
+  update devices d
+  set 
+    tank_level_percent = p_tank_level,
+    motor_state = case when p_motor_state then 'ON' else 'OFF' end,
+    battery_level = p_battery_level,
+    rssi = p_rssi,
+    updated_at = now()
+  where d.device_uid = p_device_uid
+  returning d.ota_status, d.motor_automation, d.overflow_height
+  into v_ota, v_motor_automation, v_overflow;
+
+  -- 🔵 Return values
+  return query
+  select 
+    coalesce((
+      select s.supply_state
+      from supply_stations s
+      join devices d2 on d2.supply_station_id = s.id
+      where d2.device_uid = p_device_uid
+    ), false),
+    v_ota,
+    coalesce(v_motor_automation, false),
+    coalesce(v_overflow, 90);
+
+  -- 🔥 Reset OTA flag
+  if v_ota = true then
+    update devices
+    set ota_status = false
+    where device_uid = p_device_uid;
+  end if;
+
+end;
+$$;

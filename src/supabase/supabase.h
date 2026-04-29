@@ -3,7 +3,8 @@
 struct CloudResponse {
     bool supply;
     bool ota;
-    bool motorAutomation; 
+    bool motorAutomation;
+    int overflowThreshold;
 };
 
 void supabaseInit(const char* url, const char* key);

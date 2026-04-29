@@ -8,7 +8,7 @@
 
 // ---------------- WIFI ----------------
 const char* ssid = "Airtel_mohd_3792";
-const char* password = "Air@28347";
+const char* password = "Air@28347"; 
 
 // ---------------- SUPABASE ----------------
 const char* supabaseUrl = "https://yljggigahlagdihhycfj.supabase.co";
@@ -108,135 +108,234 @@ void setup() {
     checkForOTAUpdate();
 }
 
-// ---------------- LOOP ----------------
+
+#define FILTER_SIZE 1
+#define MAX_VARIATION 20   // 🔥 relaxed (was 10)
+#define SENSOR_MAX_PERCENT 75  // 🔥 calibrated max level to avoid false overflow (was 85)
+
+int readings[FILTER_SIZE] = {0};
+int readIndex = 0;
+bool bufferFilled = false;
+bool hasValidReading = false;
+int lastStableLevel = 0;
+int stableCount = 0;
+int getFilteredLevel(int newValue) {
+
+    static int lastValid = -1;
+    static bool initialized = false;
+
+    // ---------------- BASIC VALIDATION ----------------
+    if (newValue <= 0 || newValue > 100) {
+        Serial.println("⚠️ Invalid value → ignored");
+        return initialized ? lastValid : 50;
+    }
+
+    // ---------------- FIRST VALUE ----------------
+    if (!initialized) {
+        lastValid = newValue;
+        initialized = true;
+
+        readings[readIndex] = newValue;
+        readIndex = (readIndex + 1) % FILTER_SIZE;
+
+        return newValue;
+    }
+
+    // ---------------- ADD TO BUFFER ----------------
+    readings[readIndex] = newValue;
+    readIndex = (readIndex + 1) % FILTER_SIZE;
+
+    if (readIndex == 0) bufferFilled = true;
+
+    int sum = 0;
+    int count = bufferFilled ? FILTER_SIZE : readIndex;
+
+    for (int i = 0; i < count; i++) {
+        sum += readings[i];
+    }
+
+    int avg = sum / count;
+
+    // ---------------- SAFETY ----------------
+    if (avg <= 0 || avg > 100) {
+        return lastValid;
+    }
+
+    lastValid = avg;
+    return lastValid;
+}
 void loop() {
+
+    static int overflowThreshold = 90;
+    static bool motorDecisionState = false;
+    static bool initialized = false;
+
+    static int prevLevel = 50;
+    static int stableCount = 0;
+    static int noUpdateCount = 0;
 
     LoRaPacket pkt = receiveLoRa();
 
-    if (pkt.state == RADIOLIB_ERR_NONE) {
+    if (pkt.state != RADIOLIB_ERR_NONE) return;
 
-        int distance = -1;
-        float batteryVoltage = 0.0;
-        int batteryPercent = 0;
+    // ---------------- PARSE ----------------
+    int distance = -1;
+    float batteryVoltage = 0.0;
+    int batteryPercent = 0;
 
-        // ---------------- PARSE DATA ----------------
-        int firstComma = pkt.data.indexOf(',');
-        int secondComma = pkt.data.indexOf(',', firstComma + 1);
+    int firstComma = pkt.data.indexOf(',');
+    int secondComma = pkt.data.indexOf(',', firstComma + 1);
 
-        if (firstComma > 0 && secondComma > firstComma) {
-            distance = pkt.data.substring(0, firstComma).toInt();
-            batteryVoltage = pkt.data.substring(firstComma + 1, secondComma).toFloat();
-            batteryPercent = pkt.data.substring(secondComma + 1).toInt();
+    if (firstComma > 0 && secondComma > firstComma) {
+        distance = pkt.data.substring(0, firstComma).toInt();
+        batteryVoltage = pkt.data.substring(firstComma + 1, secondComma).toFloat();
+        batteryPercent = pkt.data.substring(secondComma + 1).toInt();
+    } else {
+        Serial.println("⚠️ Invalid packet");
+        return;
+    }
+
+    Serial.print("Distance: ");
+    Serial.println(distance);
+
+    // ---------------- VALIDATION ----------------
+    if (distance <= 0 || distance > tankHeight) {
+        Serial.println("⚠️ Invalid distance → ignored");
+        return;
+    }
+
+    // ---------------- LEVEL CALC ----------------
+    float waterHeight = tankHeight - distance;
+
+    int rawLevel = (waterHeight / tankHeight) * 100;
+    rawLevel = constrain(rawLevel, 0, 100);
+
+    int calibrated = (rawLevel * 100) / SENSOR_MAX_PERCENT;
+    calibrated = constrain(calibrated, 0, 100);
+
+    int water_level = getFilteredLevel(calibrated);
+
+    if (water_level <= 0) {
+        Serial.println("⚠️ Invalid 0% → ignored");
+        return;
+    }
+
+    // ---------------- INITIALIZE ----------------
+    if (!initialized) {
+        prevLevel = water_level;
+        lastStableLevel = water_level;
+        initialized = true;
+
+        Serial.println("✅ Initial level set");
+    }
+
+    // ---------------- STABILITY ----------------
+    if (abs(water_level - prevLevel) < 30) {
+        stableCount++;
+    } else {
+        stableCount = 0;
+    }
+
+    bool isStable = (stableCount >= 1);
+
+    if (isStable) {
+        prevLevel = water_level;
+        lastStableLevel = water_level;
+        noUpdateCount = 0;
+    } else {
+        noUpdateCount++;
+
+        // 🔥 Anti-freeze fallback
+        if (noUpdateCount > 3) {
+            Serial.println("⚠️ Force update (anti-freeze)");
+            lastStableLevel = water_level;
+            prevLevel = water_level;
+            noUpdateCount = 0;
         }
+    }
 
-        // ---------------- DEBUG ----------------
-        Serial.print("Distance: "); Serial.println(distance);
-        Serial.print("Battery Voltage: "); Serial.println(batteryVoltage);
-        Serial.print("Battery %: "); Serial.println(batteryPercent);
+    int control_level = lastStableLevel;
 
-        // ---------------- CALCULATE LEVEL ----------------
-        float waterLevel = tankHeight - distance;
-        int capacity = (waterLevel / tankHeight) * 100;
+    int rssi = radio.getRSSI();
 
-        if (capacity > 100) capacity = 100;
-        if (capacity < 0) capacity = 0;
+    Serial.print("Water Level: ");
+    Serial.print(control_level);
+    Serial.print("% | RSSI: ");
+    Serial.println(rssi);
 
-        int rssi = radio.getRSSI();
+    displayStatus(control_level, rssi, batteryPercent);
 
-        Serial.print("Capacity: ");
-        Serial.print(capacity);
-        Serial.print(" % | RSSI: ");
-        Serial.println(rssi);
+    // ---------------- CLOUD ----------------
+    unsigned long interval = motorState ? 5000 : 10000;
 
-        displayStatus(capacity, rssi, batteryPercent);
+    if (millis() - lastUpload > interval) {
 
-        // ---------------- CLOUD SYNC (FIRST) ----------------
-        unsigned long interval = motorState ? 5000 : 10000;
+        CloudResponse cloud = ota_device_update_and_fetch(
+            control_level,
+            motorState,
+            rssi,
+            batteryPercent
+        );
 
-        if (millis() - lastUpload > interval) {
+        supplyState = cloud.supply;
+        motorAutomationState = cloud.motorAutomation;
 
-            Serial.println("Syncing with Supabase (RPC)...");
+        overflowThreshold = (cloud.overflowThreshold > 0)
+                            ? cloud.overflowThreshold
+                            : 90;
 
-            CloudResponse cloud = ota_device_update_and_fetch(
-                capacity,
-                motorState,
-                rssi,
-                batteryPercent
-            );
-
-            // 🔥 Update cloud-driven states FIRST
-            supplyState = cloud.supply;
-            motorAutomationState = cloud.motorAutomation;
-
-            if (cloud.ota) {
-                Serial.println("OTA Trigger received → Rebooting...");
-                delay(1000);
-                ESP.restart();
-            }
-
-            Serial.print("Cloud Supply: ");
-            Serial.println(supplyState);
-
-            Serial.print("Automation: ");
-            Serial.println(motorAutomationState);
-
-            lastUpload = millis();
-        }
-
-        // ---------------- WIFI FAILSAFE ----------------
-        if (WiFi.status() != WL_CONNECTED) {
-            Serial.println("WiFi LOST → Motor OFF (FAILSAFE)");
-
-            digitalWrite(motorPin_no, LOW);
-            digitalWrite(motorPin_nc, LOW);
-
-            motorState = false;
-        }
-
-        // ---------------- MOTOR LOGIC ----------------
-        else if (!motorAutomationState) {
-
-            Serial.println("Automation OFF → Motor OFF");
-
-            digitalWrite(motorPin_no, LOW);
+        if (cloud.ota) {
             delay(1000);
-            digitalWrite(motorPin_nc, LOW);
-
-            motorState = false;
-
-        } else if (!supplyState) {
-
-            Serial.println("Supply OFF → Motor OFF");
-
-            digitalWrite(motorPin_no, LOW);
-            delay(1000);
-            digitalWrite(motorPin_nc, LOW);
-
-            motorState = false;
-
-        } else {
-
-            if (capacity < 90) {
-
-                Serial.println("AUTO ON → Motor ON");
-
-                digitalWrite(motorPin_nc, LOW);
-                delay(1000);
-                digitalWrite(motorPin_no, HIGH);
-
-                motorState = true;
-
-            } else {
-
-                Serial.println("Tank Full → Motor OFF");
-
-                digitalWrite(motorPin_no, LOW);
-                delay(1000);
-                digitalWrite(motorPin_nc, LOW);
-
-                motorState = false;
-            }
+            ESP.restart();
         }
+
+        lastUpload = millis();
+    }
+
+    // ---------------- HYSTERESIS ----------------
+    int lowerBound = max(0, overflowThreshold - 5);
+    int upperBound = min(100, overflowThreshold + 3);
+
+    if (motorAutomationState && supplyState) {
+
+        if (control_level < lowerBound) {
+            motorDecisionState = true;
+        }
+        else if (control_level > upperBound) {
+            motorDecisionState = false;
+        }
+
+    } else {
+        motorDecisionState = false;
+    }
+
+    bool shouldRunMotor = motorDecisionState;
+
+    // ---------------- WIFI FAILSAFE ----------------
+    if (WiFi.status() != WL_CONNECTED) {
+        shouldRunMotor = false;
+    }
+
+    // ---------------- RELAY ----------------
+    if (shouldRunMotor) {
+
+        Serial.println("Motor ON");
+
+        digitalWrite(motorPin_no, LOW);
+        digitalWrite(motorPin_nc, LOW);
+        delay(200);
+        digitalWrite(motorPin_no, HIGH);
+
+        motorState = true;
+
+    } else {
+
+        Serial.println("Motor OFF");
+
+        digitalWrite(motorPin_no, LOW);
+        digitalWrite(motorPin_nc, LOW);
+
+        motorState = false;
     }
 
     delay(100);

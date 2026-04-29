@@ -13,7 +13,22 @@ void supabaseInit(const char* url, const char* key) {
     SUPABASE_URL = String(url);
     SUPABASE_KEY = String(key);
 }
+int extractIntValue(String response, String key) {
+    int start = response.indexOf(key);
+    if (start == -1) return 90; // default
 
+    start = response.indexOf(":", start);
+    int end = response.indexOf(",", start);
+
+    if (end == -1) {
+        end = response.indexOf("}", start);
+    }
+
+    String value = response.substring(start + 1, end);
+    value.trim();
+
+    return value.toInt();
+}
 
 CloudResponse ota_device_update_and_fetch(int tank, bool motor, int rssi, int battery) {
 
@@ -21,7 +36,7 @@ CloudResponse ota_device_update_and_fetch(int tank, bool motor, int rssi, int ba
 
     if (WiFi.status() != WL_CONNECTED) return result;
 
-    String url = SUPABASE_URL + "/rest/v1/rpc/ota_update_device_and_get_supply_and_automation";
+    String url = SUPABASE_URL + "/rest/v1/rpc/ota_update_device_and_get_supply_automation_height";
 
     String payload = "{";
     payload += "\"p_device_uid\":\"" + DEVICE_ID + "\",";
@@ -37,10 +52,13 @@ CloudResponse ota_device_update_and_fetch(int tank, bool motor, int rssi, int ba
     Serial.println("RPC Response: " + response);
 
     if (code == 200) {
-        result.supply = response.indexOf("\"supply_state\":true") >= 0;
-        result.ota = response.indexOf("\"ota_status\":true") >= 0;
-        result.motorAutomation = response.indexOf("\"motor_automation\":true") >= 0;
-    }
+
+    result.supply = response.indexOf("\"supply_state\":true") >= 0;
+    result.ota = response.indexOf("\"ota_status\":true") >= 0;
+    result.motorAutomation = response.indexOf("\"motor_automation\":true") >= 0;
+
+    result.overflowThreshold = extractIntValue(response, "\"overflow_height\"");
+}
 
     return result;
 }
