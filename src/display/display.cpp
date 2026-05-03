@@ -95,3 +95,31 @@ void displayStatus(int capacity, int rssi, int batteryPercent)
   display.print("%");
   display.display();
 }
+
+void displayMotorStatus(bool motorRunning)
+{
+    display.clearDisplay();
+
+    display.setFont(&FreeSans9pt7b);
+
+    // ---------------- MOTOR HEADER (BLACK BG + WHITE TEXT) ----------------
+    display.fillRect(0, 0, 128, 22, SH110X_WHITE);   // white rectangle
+    display.setTextColor(SH110X_BLACK);              // black text
+    display.setCursor(28, 16);
+    display.setTextSize(1);
+    display.print("MOTOR");
+
+    // ---------------- ON / OFF BIG TEXT ----------------
+    display.setTextColor(SH110X_WHITE);              // back to white text
+    display.setTextSize(2);
+
+    if (motorRunning) {
+        display.setCursor(34, 50);
+        display.print("ON");
+    } else {
+        display.setCursor(22, 50);
+        display.print("OFF");
+    }
+
+    display.display();
+}

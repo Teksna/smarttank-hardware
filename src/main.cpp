@@ -5,10 +5,51 @@
 #include "display/display.h"
 #include "ota/ota.h"
 #include "supabase/supabase.h"
+#include "mywifi.cpp"
 
 // ---------------- WIFI ----------------
-const char* ssid = "Airtel_mohd_3792";
-const char* password = "Air@28347"; 
+// const char* ssid = "Airtel_mohd_3792";
+// const char* password = "Air@28347"; 
+const char* ssid1 = "Airtel_mohd_3792";
+const char* pass1 = "Air@283477";
+
+const char* ssid2 = "airtel_umai_0972";
+const char* pass2 = "Your_Other_Password";
+
+void connectWiFi() {
+    Serial.println("Connecting to WiFi 1...");
+    WiFi.begin(ssid1, pass1);
+
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 10) {
+        delay(500);
+        Serial.print(".");
+        attempts++;
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("\nConnected to WiFi 1 ✅");
+        return;
+    }
+
+    // Try second WiFi
+    Serial.println("\nWiFi 1 failed. Trying WiFi 2...");
+    WiFi.begin(ssid2, pass2);
+
+    attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 10) {
+        delay(500);
+        Serial.print(".");
+        attempts++;
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("\nConnected to WiFi 2 ✅");
+    } else {
+        Serial.println("\nWiFi Failed ❌");
+    }
+}
+
 
 // ---------------- SUPABASE ----------------
 const char* supabaseUrl = "https://yljggigahlagdihhycfj.supabase.co";
@@ -68,13 +109,16 @@ void setup() {
     delay(1000);
 
     // WiFi
-    WiFi.begin(ssid, password);
+    // WiFi.begin(ssid, password);
     Serial.print("Connecting");
+     WiFi.mode(WIFI_STA);
 
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
+    connectWiFi();
+    // while (WiFi.status() != WL_CONNECTED) {
+    //     delay(500);
+    //     Serial.print(".");
+       
+    // }
 
     Serial.println("\nConnected!");
 
@@ -126,10 +170,12 @@ int calculateWaterLevel(int distance) {
 
   return (int)(percent + 0.5);
 }
+static bool motorDecisionState = false;
 void loop() {
+    Serial.println("Listening for LoRa packets...");
 
     static int overflowThreshold = 90;
-    static bool motorDecisionState = false;
+   
     static bool initialized = false;
 
     static int prevLevel = 50;
@@ -139,7 +185,7 @@ void loop() {
     LoRaPacket pkt = receiveLoRa();
 
     if (pkt.state != RADIOLIB_ERR_NONE) return;
-
+    Serial.println("Processing packet...");
     // ---------------- PARSE ----------------
     int distance = -1;
     float batteryVoltage = 0.0;
@@ -207,7 +253,8 @@ void loop() {
     Serial.print("% | RSSI: ");
     Serial.println(rssi);
 
-    displayStatus(control_level, rssi, batteryPercent);
+    // displayStatus(control_level, rssi, batteryPercent);
+    // delay(300);
 
     // ---------------- CLOUD ----------------
     unsigned long interval = motorState ? 3000 : 3000;
@@ -243,16 +290,21 @@ void loop() {
     int upperBound = min(100, overflowThreshold);
 
     if (motorAutomationState && supplyState) {
+        Serial.println("Motor automation enabled and supply available");
 
-        if (control_level < 30) {
+        if (control_level < 70 && !motorDecisionState) {
+            Serial.println("Motor ON condition met");
             motorDecisionState = true;
         }
         else if (control_level > upperBound) {
+            Serial.println("Motor OFF condition met");
+
             motorDecisionState = false;
         }
 
     } else {
         motorDecisionState = false;
+        Serial.println("Motor automation disabled or no supply");
     }
 
     bool shouldRunMotor = motorDecisionState;
@@ -263,23 +315,28 @@ void loop() {
     }
 
     // ---------------- RELAY ----------------
-    if (shouldRunMotor) {
+    if (shouldRunMotor ) {
 
         Serial.println("Motor ON");
 
-        delay(200);
         digitalWrite(motorPin_no, HIGH);
-
         motorState = true;
+        displayMotorStatus(motorState);
+        delay(2000);
+        displayStatus(control_level, rssi, batteryPercent);
+        delay(2000);
+            
 
     } else {
 
+        delay(200);
         Serial.println("Motor OFF");
-
         digitalWrite(motorPin_no, LOW);
-        
-
         motorState = false;
+        displayMotorStatus(motorState);
+        delay(2000);
+        displayStatus(control_level, rssi, batteryPercent);
+        delay(2000);
     }
 
     delay(100);
