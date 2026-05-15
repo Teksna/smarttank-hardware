@@ -123,3 +123,7 @@ void displayMotorStatus(bool motorRunning)
 
     display.display();
 }
+void cleanupDisplay() {
+    display.clearDisplay();
+    display.display();
+}

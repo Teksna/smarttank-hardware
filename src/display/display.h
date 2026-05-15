@@ -6,5 +6,6 @@
 void initDisplay();
 void displayStatus(int capacity, int rssi, int batteryPercent);
 void displayMotorStatus(bool motorRunning);
+void cleanupDisplay();
 
 #endif

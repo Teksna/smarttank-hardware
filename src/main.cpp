@@ -11,10 +11,10 @@
 // const char* ssid = "Airtel_mohd_3792";
 // const char* password = "Air@28347"; 
 const char* ssid1 = "Airtel_mohd_3792";
-const char* pass1 = "Air@283477";
+const char* pass1 = "Air@28347";
 
-const char* ssid2 = "airtel_umai_0972";
-const char* pass2 = "Your_Other_Password";
+const char* ssid2 = "Airtel_umai_0321";
+const char* pass2 = "air96843";
 
 void connectWiFi() {
     Serial.println("Connecting to WiFi 1...");
@@ -81,10 +81,10 @@ struct LoRaPacket {
     int state;
     String data;
 };
-
+LoRaPacket pkt;
 // ---------------- RECEIVE FUNCTION ----------------
 LoRaPacket receiveLoRa() {
-    LoRaPacket pkt;
+    
     pkt.state = radio.receive(pkt.data);
 
     if (pkt.state == RADIOLIB_ERR_NONE) {
@@ -170,8 +170,16 @@ int calculateWaterLevel(int distance) {
 
   return (int)(percent + 0.5);
 }
+
 static bool motorDecisionState = false;
+bool tank_just_filled = true;
 void loop() {
+    if (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+            Serial.println("WiFi disconnected. Attempting to reconnect...");
+        connectWiFi();
+    }
+
     Serial.println("Listening for LoRa packets...");
 
     static int overflowThreshold = 90;
@@ -284,22 +292,44 @@ void loop() {
 
         lastUpload = millis();
     }
-
+    else {
+        Serial.println("Waiting to upload data...& keeping motor state to run");
+        supplyState = true;
+        motorAutomationState = true;
+    }
+    
     // ---------------- HYSTERESIS ----------------
     int lowerBound = max(0, overflowThreshold );
     int upperBound = min(100, overflowThreshold);
 
     if (motorAutomationState && supplyState) {
         Serial.println("Motor automation enabled and supply available");
+        Serial.println("Evaluating motor control conditions...");
+        // Serial.print("Control Level: ");
+        // Serial.print(control_level);
+        // Serial.print("% | Lower Bound: ");
+        // Serial.print(lowerBound);
+        // Serial.print("% | Upper Bound: ");
+        // Serial.print(upperBound);
+        Serial.print("Motor Decision State: ");
+        Serial.println(motorDecisionState ? "ON" : "OFF");
+        Serial.print("Tank Just Filled: ");
+        Serial.println(tank_just_filled ? "YES" : "NO");
 
-        if (control_level < 70 && !motorDecisionState) {
+        if (control_level < 95 && !motorDecisionState && tank_just_filled) {
+            Serial.println("Tank to re-fill in process...");
+            tank_just_filled = false;
+        }
+
+        if (control_level < 99 && !motorDecisionState && !tank_just_filled) {
             Serial.println("Motor ON condition met");
             motorDecisionState = true;
         }
-        else if (control_level > upperBound) {
+        else if (control_level >= upperBound) {
+            delay(2000); // 🔥 Anti-frequent toggling delay, which will improved as per rate of water filling
             Serial.println("Motor OFF condition met");
-
             motorDecisionState = false;
+            tank_just_filled = true;
         }
 
     } else {
@@ -310,33 +340,43 @@ void loop() {
     bool shouldRunMotor = motorDecisionState;
 
     // ---------------- WIFI FAILSAFE ----------------
-    if (WiFi.status() != WL_CONNECTED) {
-        shouldRunMotor = false;
-    }
+    // if (WiFi.status() != WL_CONNECTED) {
+    //     shouldRunMotor = true;
+    // }
 
     // ---------------- RELAY ----------------
     if (shouldRunMotor ) {
 
         Serial.println("Motor ON");
-
+        cleanupDisplay();
+        delay(1500);
         digitalWrite(motorPin_no, HIGH);
-        motorState = true;
+         // brief delay to ensure relay state change
+        delay(1500);
+         motorState = true;
         displayMotorStatus(motorState);
-        delay(2000);
+        delay(1000);
+        cleanupDisplay();
+        delay(500);
         displayStatus(control_level, rssi, batteryPercent);
-        delay(2000);
+        delay(1000);
             
 
     } else {
 
-        delay(200);
+        
         Serial.println("Motor OFF");
+        cleanupDisplay();
+        delay(1500);
         digitalWrite(motorPin_no, LOW);
+        delay(1500); // brief delay to ensure relay state change
         motorState = false;
         displayMotorStatus(motorState);
-        delay(2000);
+        delay(1000);
+        cleanupDisplay();
+        delay(500);
         displayStatus(control_level, rssi, batteryPercent);
-        delay(2000);
+        delay(1000);
     }
 
     delay(100);
