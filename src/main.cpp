@@ -171,7 +171,7 @@ int calculateWaterLevel(int distance) {
   return (int)(percent + 0.5);
 }
 
-static bool motorDecisionState = false;
+static bool motorDecisionState = false; 
 bool tank_just_filled = true;
 void loop() {
     if (WiFi.status() != WL_CONNECTED) {
