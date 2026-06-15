@@ -16,7 +16,17 @@ SX1276 radio = new Module(ss, dio0, rst, dio1);
 // Divider ratio (220k + 100k)
 #define DIVIDER_RATIO 3.2
 
+// -------- Distance Limits --------
+#define MAX_DISTANCE 120
+#define MIN_DISTANCE 19          // sensor unreliable below this
+#define MIN_VALID_DISTANCE 19    // clamp prediction here
+
 long duration;
+
+// -------- Prediction Variables --------
+int lastDistance = 0;
+int lastRate = 0;
+int lastValidDistance = 0;
 
 // -------- SETUP --------
 void setup() {
@@ -26,20 +36,21 @@ void setup() {
   pinMode(echoPin, INPUT);
   pinMode(batteryin, INPUT);
 
-  // Improve ADC range
+  digitalWrite(trigPin, LOW);
+
   analogSetAttenuation(ADC_11db);
 
   Serial.print("[SX1276] Initializing ... ");
 
   int state = radio.begin(
-    865.0,   // Frequency
-    125.0,   // Bandwidth
-    9,       // SF
-    5,       // CR
-    0x12,    // Sync word
-    17,      // Power
-    8,       // Preamble
-    0        // Gain
+    865.0,
+    125.0,
+    9,
+    5,
+    0x12,
+    17,
+    8,
+    0
   );
 
   if (state == RADIOLIB_ERR_NONE) {
@@ -51,25 +62,120 @@ void setup() {
   }
 }
 
-// -------- DISTANCE --------
-int readDistance() {
+// -------- RAW DISTANCE --------
+int readDistanceRaw() {
   digitalWrite(trigPin, LOW);
-  delayMicroseconds(2);
+  delayMicroseconds(3);
 
   digitalWrite(trigPin, HIGH);
   delayMicroseconds(10);
   digitalWrite(trigPin, LOW);
 
-  duration = pulseIn(echoPin, HIGH, 30000); // timeout
+  long duration = pulseIn(echoPin, HIGH, 25000);
 
-  int dist = duration * 0.034 / 2;
+  if (duration == 0) return -1;
 
-  if (dist <= 0 || dist > 1000) return -1;
+  int dist = duration * 0.0343 / 2;
+
+  if (dist < MIN_DISTANCE || dist > MAX_DISTANCE) return -1;
 
   return dist;
 }
 
-// -------- BATTERY RAW (AVERAGED) --------
+// -------- PREDICTION FILTER --------
+int applyPrediction(int newValue) {
+
+  if (lastDistance == 0) {
+    lastDistance = newValue;
+    return newValue;
+  }
+
+  int currentRate = newValue - lastDistance;
+
+  int smoothRate = (lastRate * 0.7) + (currentRate * 0.3);
+
+  // Clamp unrealistic speed
+  if (smoothRate > 5) smoothRate = 5;
+  if (smoothRate < -5) smoothRate = -5;
+
+  int predicted = lastDistance + smoothRate;
+
+  // 🔥 Clamp to minimum valid distance
+  if (predicted < MIN_VALID_DISTANCE) {
+    predicted = MIN_VALID_DISTANCE;
+  }
+
+  int diff = abs(newValue - predicted);
+
+  // Reject anomaly
+  if (diff > 20) {
+    Serial.println("⚠️ Using predicted value");
+
+    lastDistance = predicted;
+    lastRate = smoothRate;
+    return predicted;
+  }
+
+  lastDistance = newValue;
+  lastRate = smoothRate;
+
+  return newValue;
+}
+
+// -------- STABLE DISTANCE --------
+int readDistance() {
+  const int samples = 5;
+  int readings[samples];
+  int count = 0;
+
+  for (int i = 0; i < samples; i++) {
+    int d = readDistanceRaw();
+
+    if (d != -1) {
+      readings[count++] = d;
+    }
+
+    delay(30);
+  }
+
+  // -------- No echo → predict --------
+  if (count == 0) {
+    Serial.println("⚠️ No echo → predicting");
+
+    int predicted = lastDistance + lastRate;
+
+    // 🔥 Clamp here also
+    if (predicted < MIN_VALID_DISTANCE) {
+      predicted = MIN_VALID_DISTANCE;
+    }
+
+    lastDistance = predicted;
+    lastValidDistance = predicted;
+
+    return predicted;
+  }
+
+  // -------- Sort for median --------
+  for (int i = 0; i < count - 1; i++) {
+    for (int j = i + 1; j < count; j++) {
+      if (readings[j] < readings[i]) {
+        int temp = readings[i];
+        readings[i] = readings[j];
+        readings[j] = temp;
+      }
+    }
+  }
+
+  int median = readings[count / 2];
+
+  int finalValue = applyPrediction(median);
+
+  lastValidDistance = finalValue;
+
+  return finalValue;
+}
+
+// -------- BATTERY RAW --------
 int readBatteryRaw() {
   int sum = 0;
 
@@ -86,13 +192,12 @@ float readBatteryVoltage() {
   int raw = readBatteryRaw();
 
   float v_adc = raw * (3.3 / 4095.0);
-
   float v_battery = v_adc * DIVIDER_RATIO;
 
   return v_battery;
 }
 
-// -------- BATTERY % (1–100 SCALE) --------
+// -------- BATTERY % --------
 int batteryPercent(float voltage) {
   float v_min = 6.4;
   float v_max = 8.4;
@@ -102,7 +207,7 @@ int batteryPercent(float voltage) {
   if (percent > 100) percent = 100;
   if (percent < 0) percent = 0;
 
-  return (int)(percent + 0.5); // round
+  return (int)(percent + 0.5);
 }
 
 // -------- LOOP --------
@@ -142,5 +247,5 @@ void loop() {
 
   Serial.println("----------------------");
 
-  delay(5000);  // change later to deep sleep
+  delay(5000);
 }
