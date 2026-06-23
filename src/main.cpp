@@ -71,7 +71,7 @@ int readDistanceRaw() {
   delayMicroseconds(10);
   digitalWrite(trigPin, LOW);
 
-  long duration = pulseIn(echoPin, HIGH, 25000);
+  long duration = pulseIn(echoPin, HIGH);
 
   if (duration == 0) return -1;
 
@@ -130,7 +130,8 @@ int readDistance() {
 
   for (int i = 0; i < samples; i++) {
     int d = readDistanceRaw();
-
+    Serial.print("Raw reading: ");
+    Serial.println(d);
     if (d != -1) {
       readings[count++] = d;
     }
@@ -139,21 +140,13 @@ int readDistance() {
   }
 
   // -------- No echo → predict --------
+  // 
   if (count == 0) {
-    Serial.println("⚠️ No echo → predicting");
+    Serial.println("⚠️ No echo");
 
-    int predicted = lastDistance + lastRate;
-
-    // 🔥 Clamp here also
-    if (predicted < MIN_VALID_DISTANCE) {
-      predicted = MIN_VALID_DISTANCE;
-    }
-
-    lastDistance = predicted;
-    lastValidDistance = predicted;
-
-    return predicted;
-  }
+    return MIN_VALID_DISTANCE;
+}
+  
 
   // -------- Sort for median --------
   for (int i = 0; i < count - 1; i++) {
@@ -171,7 +164,8 @@ int readDistance() {
   int finalValue = applyPrediction(median);
 
   lastValidDistance = finalValue;
-
+  Serial.print("Final distance: ");
+  Serial.println(finalValue);
   return finalValue;
 }
 
@@ -219,8 +213,8 @@ void loop() {
   float battery = readBatteryVoltage();
   int percent = batteryPercent(battery);
 
-  Serial.print("Distance: ");
-  Serial.println(distance);
+  // Serial.print("Distance: ");
+  // Serial.println(distance);
 
   Serial.print("Battery Voltage: ");
   Serial.println(battery);
