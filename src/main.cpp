@@ -349,17 +349,19 @@ void loop() {
 
         Serial.println("Motor ON");
         cleanupDisplay();
-        delay(1500);
+        //delay(1500);
         digitalWrite(motorPin_no, HIGH);
          // brief delay to ensure relay state change
         delay(1500);
-         motorState = true;
+        motorState = true;
+        Serial.println("Displaying motor status...");
         displayMotorStatus(motorState);
-        delay(1000);
+        delay(2000);
+        Serial.println("Displaying tank status...");
         cleanupDisplay();
         delay(500);
         displayStatus(control_level, rssi, batteryPercent);
-        delay(1000);
+        delay(2000);
             
 
     } else {

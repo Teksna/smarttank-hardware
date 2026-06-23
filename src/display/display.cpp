@@ -561,6 +561,9 @@ void displayStatus(
     display.setTextColor(ST77XX_WHITE);
     display.setCursor(panelX + 32, 122);
     display.print(batteryPercent);
+    // display.setFont(&FreeSans9pt7b);
+    // display.setCursor(panelX + 62, 122);
+    display.print("%");
 
     // =====================================================
     // ANIMATION
@@ -572,17 +575,7 @@ void displayStatus(
         capacity = 0;
     }
     delay(2000);
-    Serial.println("Cleaning up display...");
-    display.fillScreen(ST77XX_BLACK);
-    
-    // if (status)
-    //     status = false;
-    // else
-    //     status = true;
-    // motorStatus(status);
-    // delay(2000);
-    // display.fillScreen(ST77XX_BLACK);
-
+  
 }
 
 
