@@ -14,7 +14,7 @@
 SX1276 radio = new Module(ss, dio0, rst, dio1);
 
 // Divider ratio (220k + 100k)
-#define DIVIDER_RATIO 3.2
+#define DIVIDER_RATIO  3.93
 
 // -------- Distance Limits --------
 #define MAX_DISTANCE 120
@@ -184,8 +184,13 @@ int readBatteryRaw() {
 // -------- BATTERY VOLTAGE --------
 float readBatteryVoltage() {
   int raw = readBatteryRaw();
+  Serial.print("ADC Raw: ");
+  Serial.println(raw);
 
   float v_adc = raw * (3.3 / 4095.0);
+  Serial.print("ADC Voltage: ");
+  Serial.println(v_adc, 3);
+
   float v_battery = v_adc * DIVIDER_RATIO;
 
   return v_battery;
@@ -193,8 +198,8 @@ float readBatteryVoltage() {
 
 // -------- BATTERY % --------
 int batteryPercent(float voltage) {
-  float v_min = 6.4;
-  float v_max = 8.4;
+  float v_min = 5.5;
+  float v_max = 6.4;
 
   float percent = ((voltage - v_min) / (v_max - v_min)) * 100.0;
 
