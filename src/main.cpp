@@ -5,379 +5,497 @@
 #include "display/display.h"
 #include "ota/ota.h"
 #include "supabase/supabase.h"
-#include "mywifi.cpp"
+
+// ---------------- BUILD OPTIONS ----------------
+#ifndef DEBUG_TIMING
+#define DEBUG_TIMING 0
+#endif
 
 // ---------------- WIFI ----------------
-// const char* ssid = "Airtel_mohd_3792";
-// const char* password = "Air@28347"; 
-const char* ssid1 = "Airtel_mohd_3792";
-const char* pass1 = "Air@28347";
-
-const char* ssid2 = "Airtel_umai_0321";
-const char* pass2 = "air96843";
-
-void connectWiFi() {
-    Serial.println("Connecting to WiFi 1...");
-    WiFi.begin(ssid1, pass1);
-
-    int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 10) {
-        delay(500);
-        Serial.print(".");
-        attempts++;
-    }
-
-    if (WiFi.status() == WL_CONNECTED) {
-        Serial.println("\nConnected to WiFi 1 ✅");
-        return;
-    }
-
-    // Try second WiFi
-    Serial.println("\nWiFi 1 failed. Trying WiFi 2...");
-    WiFi.begin(ssid2, pass2);
-
-    attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 10) {
-        delay(500);
-        Serial.print(".");
-        attempts++;
-    }
-
-    if (WiFi.status() == WL_CONNECTED) {
-        Serial.println("\nConnected to WiFi 2 ✅");
-    } else {
-        Serial.println("\nWiFi Failed ❌");
-    }
-}
-
+static const char* WIFI_SSID_1 = "Airtel_mohd_3792";
+static const char* WIFI_PASS_1 = "Air@28347";
+static const char* WIFI_SSID_2 = "Airtel_umai_0321";
+static const char* WIFI_PASS_2 = "air96843";
 
 // ---------------- SUPABASE ----------------
-const char* supabaseUrl = "https://yljggigahlagdihhycfj.supabase.co";
-const char* supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlsamdnaWdhaGxhZ2RpaGh5Y2ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MDcwNTMsImV4cCI6MjA4ODI4MzA1M30.NeGRlQv-T-OGW4iqJPLV2T-2uPQxDNz0r9GHLAG8F-g";
+static const char* SUPABASE_URL = "https://yljggigahlagdihhycfj.supabase.co";
+static const char* SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlsamdnaWdhaGxhZ2RpaGh5Y2ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MDcwNTMsImV4cCI6MjA4ODI4MzA1M30.NeGRlQv-T-OGW4iqJPLV2T-2uPQxDNz0r9GHLAG8F-g";
 
 // ---------------- LORA ----------------
-#define ss 5
-#define rst 14
-#define dio0 2
-#define dio1 34
+static constexpr int LORA_SS = 5;
+static constexpr int LORA_RST = 14;
+static constexpr int LORA_DIO0 = 2;
+static constexpr int LORA_DIO1 = 34;
+static constexpr size_t LORA_PACKET_BUFFER_SIZE = 64;
 
-SX1276 radio = new Module(ss, dio0, rst, dio1);
+static SX1276 radio = new Module(LORA_SS, LORA_DIO0, LORA_RST, LORA_DIO1);
+static volatile bool loraPacketAvailable = false;
+static volatile uint32_t loraInterruptCount = 0;
 
 // ---------------- MOTOR ----------------
-const int motorPin_no = 27; // GPIO pin to control the motor (normally open relay)
-const int motorPin_nc = 26; // GPIO pin to control the motor (normally closed relay)
-bool motorState = false;
+static constexpr int MOTOR_PIN_NO = 27;
+static constexpr int MOTOR_PIN_NC = 26;
+static bool motorState = false;
+static bool motorDecisionState = false;
+static bool tankJustFilled = true;
+static bool relayWritePending = true;
 
 // ---------------- TANK ----------------
+static constexpr int FULL_DISTANCE_CM = 19;
+static int emptyDistanceCm = 120;
+static int overflowThreshold = 90;
+static int previousLevel = 50;
+static int lastStableLevel = 0;
+static int stableCount = 0;
+static int noUpdateCount = 0;
+static bool levelInitialized = false;
 
-// ---------------- TIMERS ----------------
-unsigned long lastFetch = 0;
-unsigned long lastUpload = 0;
-bool supplyState = false;
-bool motorAutomationState = false;
-
-// ---------------- STRUCT ----------------
-struct LoRaPacket {
-    int state;
-    String data;
-};
-LoRaPacket pkt;
-// ---------------- RECEIVE FUNCTION ----------------
-LoRaPacket receiveLoRa() {
-    
-    pkt.state = radio.receive(pkt.data);
-
-    if (pkt.state == RADIOLIB_ERR_NONE) {
-        Serial.println("Received: " + pkt.data);
-    }
-
-    return pkt;
-}
-
-// ---------------- SETUP ----------------
-void setup() {
-    Serial.begin(115200);
-
-    initDisplay();
-
-    pinMode(motorPin_no, OUTPUT);
-    pinMode(motorPin_nc, OUTPUT);
-    digitalWrite(motorPin_nc, LOW); // Ensure normally closed relay is active to keep motor off
-    delay(2000); // brief delay to ensure relay state change
-    digitalWrite(motorPin_no, LOW); // Ensure normally open relay is inactive to keep motor off
-    Serial.println("Motor Pins Initialized");
-    delay(1000);
-
-    // WiFi
-    // WiFi.begin(ssid, password);
-    Serial.print("Connecting");
-     WiFi.mode(WIFI_STA);
-
-    connectWiFi();
-    // while (WiFi.status() != WL_CONNECTED) {
-    //     delay(500);
-    //     Serial.print(".");
-       
-    // }
-
-    Serial.println("\nConnected!");
-
-    // Supabase init
-    supabaseInit(supabaseUrl, supabaseKey);
-
-    // LoRa init
-    Serial.print("[SX1276] Initializing ... ");
-
-    int state = radio.begin(
-        865.0,
-        125.0,
-        9,
-        5,
-        0x12,
-        17,
-        8,
-        0
-    );
-
-    if (state == RADIOLIB_ERR_NONE) {
-        Serial.println("success!");
-    } else {
-        Serial.print("failed, code ");
-        Serial.println(state);
-        while (true);
-    }
-
-    // OTA
-    checkForOTAUpdate();
-}
-
-
-
-#define SENSOR_MAX_PERCENT 80  // 🔥 calibrated max level to avoid false overflow (was 85)
-
-int FULL = 19;     // tank full
-int EMPTY = 120;   // tank empty (adjust)
-int lastStableLevel = 0;
-int stableCount = 0;
-int calculateWaterLevel(int distance) {
-
-  
-
-  if (distance <= FULL) return 100;
-  if (distance >= EMPTY) return 0;
-
-  float percent = (float)(EMPTY - distance) * 100.0 / (EMPTY - FULL);
-
-  return (int)(percent + 0.5);
-}
-
-static bool motorDecisionState = false;
-bool tank_just_filled = true;
-void loop() {
-    if (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-            Serial.println("WiFi disconnected. Attempting to reconnect...");
-        connectWiFi();
-    }
-
-    Serial.println("Listening for LoRa packets...");
-
-    static int overflowThreshold = 90;
-   
-    static bool initialized = false;
-
-    static int prevLevel = 50;
-    static int stableCount = 0;
-    static int noUpdateCount = 0;
-
-    LoRaPacket pkt = receiveLoRa();
-
-    if (pkt.state != RADIOLIB_ERR_NONE) return;
-    Serial.println("Processing packet...");
-    // ---------------- PARSE ----------------
+// ---------------- RECEIVER STATE ----------------
+struct ReceiverState {
+    bool hasPacket = false;
+    bool displayDirty = true;
+    bool cloudDirty = false;
     int distance = -1;
-    float batteryVoltage = 0.0;
+    int tankLevel = 0;
+    int rssi = 0;
+    float batteryVoltage = 0.0f;
     int batteryPercent = 0;
+};
 
-    int firstComma = pkt.data.indexOf(',');
-    int secondComma = pkt.data.indexOf(',', firstComma + 1);
+static ReceiverState receiver;
+static bool supplyState = false;
+static bool motorAutomationState = false;
 
-    if (firstComma > 0 && secondComma > firstComma) {
-        distance = pkt.data.substring(0, firstComma).toInt();
-        batteryVoltage = pkt.data.substring(firstComma + 1, secondComma).toFloat();
-        batteryPercent = pkt.data.substring(secondComma + 1).toInt();
-    } else {
-        Serial.println("⚠️ Invalid packet");
-        return;
+// ---------------- SCHEDULER ----------------
+static constexpr uint32_t WIFI_RECONNECT_INTERVAL_MS = 15000;
+static constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 6000;
+static constexpr uint32_t CLOUD_UPLOAD_INTERVAL_MS = 3000;
+static constexpr uint32_t OTA_CHECK_INTERVAL_MS = 15UL * 60UL * 1000UL;
+static constexpr uint32_t MOTOR_EVALUATE_INTERVAL_MS = 250;
+static constexpr uint32_t DISPLAY_MIN_INTERVAL_MS = 500;
+static constexpr uint32_t DISPLAY_MOTOR_SCREEN_MS = 2000;
+static constexpr uint32_t DIAGNOSTIC_INTERVAL_MS = 10000;
+
+static uint32_t lastWiFiAttemptMs = 0;
+static uint32_t wifiAttemptStartedMs = 0;
+static uint8_t wifiCredentialIndex = 0;
+static bool wifiConnectInProgress = false;
+static uint32_t lastCloudUploadMs = 0;
+static uint32_t lastOtaCheckMs = 0;
+static uint32_t lastMotorEvaluateMs = 0;
+static uint32_t lastDisplayMs = 0;
+static uint32_t lastDiagnosticMs = 0;
+static uint32_t motorScreenUntilMs = 0;
+static bool motorScreenActive = false;
+
+struct TaskTiming {
+    uint32_t lastUs = 0;
+    uint32_t maxUs = 0;
+};
+
+static TaskTiming loraTiming;
+static TaskTiming wifiTiming;
+static TaskTiming cloudTiming;
+static TaskTiming otaTiming;
+static TaskTiming motorTiming;
+static TaskTiming displayTiming;
+
+static inline void recordTiming(TaskTiming& timing, uint32_t startedUs) {
+#if DEBUG_TIMING
+    timing.lastUs = micros() - startedUs;
+    if (timing.lastUs > timing.maxUs) {
+        timing.maxUs = timing.lastUs;
+    }
+#else
+    (void)timing;
+    (void)startedUs;
+#endif
+}
+
+static void IRAM_ATTR onLoRaDio0() {
+    loraPacketAvailable = true;
+    loraInterruptCount++;
+}
+
+static int calculateWaterLevel(int distance) {
+    if (distance <= FULL_DISTANCE_CM) {
+        return 100;
+    }
+    if (distance >= emptyDistanceCm) {
+        return 0;
     }
 
-    Serial.print("Distance: ");
-    Serial.println(distance);
+    const float percent = static_cast<float>(emptyDistanceCm - distance) * 100.0f /
+                          static_cast<float>(emptyDistanceCm - FULL_DISTANCE_CM);
+    return static_cast<int>(percent + 0.5f);
+}
 
-
-     int water_level = calculateWaterLevel(distance);
-
-
-    // ---------------- INITIALIZE ----------------
-    if (!initialized) {
-        prevLevel = water_level;
-        lastStableLevel = water_level;
-        initialized = true;
-
-        Serial.println("✅ Initial level set");
+static bool parsePacket(const char* packet, int& distance, float& batteryVoltage, int& batteryPercent) {
+    char* endPtr = nullptr;
+    const long parsedDistance = strtol(packet, &endPtr, 10);
+    if (endPtr == packet || *endPtr != ',') {
+        return false;
     }
 
-    // ---------------- STABILITY ----------------
-    if (abs(water_level - prevLevel) < 30) {
+    const float parsedVoltage = strtof(endPtr + 1, &endPtr);
+    if (*endPtr != ',') {
+        return false;
+    }
+
+    const long parsedBattery = strtol(endPtr + 1, &endPtr, 10);
+    if (*endPtr != '\0' && *endPtr != '\r' && *endPtr != '\n') {
+        return false;
+    }
+
+    distance = static_cast<int>(parsedDistance);
+    batteryVoltage = parsedVoltage;
+    batteryPercent = constrain(static_cast<int>(parsedBattery), 0, 100);
+    return true;
+}
+
+static void updateStableLevel(int waterLevel) {
+    if (!levelInitialized) {
+        previousLevel = waterLevel;
+        lastStableLevel = waterLevel;
+        levelInitialized = true;
+        Serial.println("Initial level set");
+    }
+
+    if (abs(waterLevel - previousLevel) < 30) {
         stableCount++;
     } else {
         stableCount = 0;
     }
 
-    bool isStable = (stableCount >= 1);
-
-    if (isStable) {
-        prevLevel = water_level;
-        lastStableLevel = water_level;
+    if (stableCount >= 1) {
+        previousLevel = waterLevel;
+        lastStableLevel = waterLevel;
         noUpdateCount = 0;
-    } else {
-        noUpdateCount++;
+        return;
+    }
 
-        // 🔥 Anti-freeze fallback
-        if (noUpdateCount > 3) {
-            Serial.println("⚠️ Force update (anti-freeze)");
-            lastStableLevel = water_level;
-            prevLevel = water_level;
-            noUpdateCount = 0;
+    noUpdateCount++;
+    if (noUpdateCount > 3) {
+        Serial.println("Force update after unstable readings");
+        lastStableLevel = waterLevel;
+        previousLevel = waterLevel;
+        noUpdateCount = 0;
+    }
+}
+
+static void beginWiFiConnection() {
+    const char* ssid = (wifiCredentialIndex == 0) ? WIFI_SSID_1 : WIFI_SSID_2;
+    const char* pass = (wifiCredentialIndex == 0) ? WIFI_PASS_1 : WIFI_PASS_2;
+
+    Serial.print("Connecting WiFi: ");
+    Serial.println(ssid);
+    WiFi.disconnect(false, false);
+    WiFi.begin(ssid, pass);
+    wifiAttemptStartedMs = millis();
+    lastWiFiAttemptMs = wifiAttemptStartedMs;
+    wifiConnectInProgress = true;
+}
+
+static void handleWiFi() {
+    const uint32_t startedUs = micros();
+    const uint32_t now = millis();
+
+    if (WiFi.status() == WL_CONNECTED) {
+        if (wifiConnectInProgress) {
+            Serial.print("WiFi connected, IP: ");
+            Serial.println(WiFi.localIP());
         }
+        wifiConnectInProgress = false;
+        recordTiming(wifiTiming, startedUs);
+        return;
     }
 
-    int control_level = lastStableLevel;
-
-    int rssi = radio.getRSSI();
-
-    Serial.print("Water Level: ");
-    Serial.print(control_level);
-    Serial.print("% | RSSI: ");
-    Serial.println(rssi);
-
-    // displayStatus(control_level, rssi, batteryPercent);
-    // delay(300);
-
-    // ---------------- CLOUD ----------------
-    unsigned long interval = motorState ? 3000 : 3000;
-
-    if (millis() - lastUpload > interval) {
-
-        CloudResponse cloud = ota_device_update_and_fetch(
-            control_level,
-            motorState,
-            rssi,
-            batteryPercent
-        );
-
-        supplyState = cloud.supply;
-        motorAutomationState = cloud.motorAutomation;
-
-        overflowThreshold = (cloud.overflowThreshold > 0)
-                            ? cloud.overflowThreshold
-                            : 90;
-        
-        EMPTY = overflowThreshold; 
-
-        if (cloud.ota) {
-            delay(1000);
-            ESP.restart();
-        }
-
-        lastUpload = millis();
+    if (wifiConnectInProgress && now - wifiAttemptStartedMs < WIFI_CONNECT_TIMEOUT_MS) {
+        recordTiming(wifiTiming, startedUs);
+        return;
     }
-    else {
-        Serial.println("Waiting to upload data...& keeping motor state to run");
-        supplyState = true;
-        motorAutomationState = true;
+
+    if (!wifiConnectInProgress || now - lastWiFiAttemptMs >= WIFI_RECONNECT_INTERVAL_MS) {
+        wifiCredentialIndex = (wifiConnectInProgress && wifiCredentialIndex == 0) ? 1 : 0;
+        beginWiFiConnection();
     }
-    
-    // ---------------- HYSTERESIS ----------------
-    int lowerBound = max(0, overflowThreshold );
-    int upperBound = min(100, overflowThreshold);
+
+    recordTiming(wifiTiming, startedUs);
+}
+
+static void initMotorPins() {
+    pinMode(MOTOR_PIN_NO, OUTPUT);
+    pinMode(MOTOR_PIN_NC, OUTPUT);
+    digitalWrite(MOTOR_PIN_NC, LOW);
+    digitalWrite(MOTOR_PIN_NO, LOW);
+    motorState = false;
+    Serial.println("Motor pins initialized");
+}
+
+static void applyMotorOutput(bool shouldRunMotor) {
+    if (!relayWritePending && motorState == shouldRunMotor) {
+        return;
+    }
+
+    digitalWrite(MOTOR_PIN_NO, shouldRunMotor ? HIGH : LOW);
+    motorState = shouldRunMotor;
+    relayWritePending = false;
+    receiver.displayDirty = true;
+    motorScreenActive = true;
+    motorScreenUntilMs = 0;
+
+    Serial.print("Motor ");
+    Serial.println(motorState ? "ON" : "OFF");
+}
+
+static void handleMotor() {
+    const uint32_t startedUs = micros();
+    const uint32_t now = millis();
+    if (now - lastMotorEvaluateMs < MOTOR_EVALUATE_INTERVAL_MS) {
+        recordTiming(motorTiming, startedUs);
+        return;
+    }
+    lastMotorEvaluateMs = now;
+
+    if (!receiver.hasPacket) {
+        applyMotorOutput(false);
+        recordTiming(motorTiming, startedUs);
+        return;
+    }
+
+    const int controlLevel = lastStableLevel;
+    const int upperBound = constrain(overflowThreshold, 0, 100);
 
     if (motorAutomationState && supplyState) {
-        Serial.println("Motor automation enabled and supply available");
-        Serial.println("Evaluating motor control conditions...");
-        // Serial.print("Control Level: ");
-        // Serial.print(control_level);
-        // Serial.print("% | Lower Bound: ");
-        // Serial.print(lowerBound);
-        // Serial.print("% | Upper Bound: ");
-        // Serial.print(upperBound);
-        Serial.print("Motor Decision State: ");
-        Serial.println(motorDecisionState ? "ON" : "OFF");
-        Serial.print("Tank Just Filled: ");
-        Serial.println(tank_just_filled ? "YES" : "NO");
-
-        if (control_level < 95 && !motorDecisionState && tank_just_filled) {
-            Serial.println("Tank to re-fill in process...");
-            tank_just_filled = false;
+        if (controlLevel < 95 && !motorDecisionState && tankJustFilled) {
+            tankJustFilled = false;
         }
 
-        if (control_level < 99 && !motorDecisionState && !tank_just_filled) {
-            Serial.println("Motor ON condition met");
+        if (controlLevel < 99 && !motorDecisionState && !tankJustFilled) {
             motorDecisionState = true;
-        }
-        else if (control_level >= upperBound) {
-            delay(2000); // 🔥 Anti-frequent toggling delay, which will improved as per rate of water filling
-            Serial.println("Motor OFF condition met");
+        } else if (controlLevel >= upperBound) {
             motorDecisionState = false;
-            tank_just_filled = true;
+            tankJustFilled = true;
         }
-
     } else {
         motorDecisionState = false;
-        Serial.println("Motor automation disabled or no supply");
     }
 
-    bool shouldRunMotor = motorDecisionState;
+    applyMotorOutput(motorDecisionState);
+    recordTiming(motorTiming, startedUs);
+}
 
-    // ---------------- WIFI FAILSAFE ----------------
-    // if (WiFi.status() != WL_CONNECTED) {
-    //     shouldRunMotor = true;
-    // }
-
-    // ---------------- RELAY ----------------
-    if (shouldRunMotor ) {
-
-        Serial.println("Motor ON");
-        cleanupDisplay();
-        delay(1500);
-        digitalWrite(motorPin_no, HIGH);
-         // brief delay to ensure relay state change
-        delay(1500);
-         motorState = true;
-        displayMotorStatus(motorState);
-        delay(1000);
-        cleanupDisplay();
-        delay(500);
-        displayStatus(control_level, rssi, batteryPercent);
-        delay(1000);
-            
-
-    } else {
-
-        
-        Serial.println("Motor OFF");
-        cleanupDisplay();
-        delay(1500);
-        digitalWrite(motorPin_no, LOW);
-        delay(1500); // brief delay to ensure relay state change
-        motorState = false;
-        displayMotorStatus(motorState);
-        delay(1000);
-        cleanupDisplay();
-        delay(500);
-        displayStatus(control_level, rssi, batteryPercent);
-        delay(1000);
+static void handleLoRa() {
+    const uint32_t startedUs = micros();
+    if (!loraPacketAvailable) {
+        recordTiming(loraTiming, startedUs);
+        return;
     }
 
-    delay(100);
+    noInterrupts();
+    loraPacketAvailable = false;
+    interrupts();
+
+    uint8_t packetBytes[LORA_PACKET_BUFFER_SIZE] = {0};
+    size_t packetLength = radio.getPacketLength();
+    if (packetLength >= LORA_PACKET_BUFFER_SIZE) {
+        packetLength = LORA_PACKET_BUFFER_SIZE - 1;
+    }
+
+    const int state = radio.readData(packetBytes, packetLength);
+    radio.startReceive();
+
+    if (state != RADIOLIB_ERR_NONE) {
+        Serial.print("LoRa read failed, code ");
+        Serial.println(state);
+        recordTiming(loraTiming, startedUs);
+        return;
+    }
+
+    packetBytes[packetLength] = '\0';
+
+    int distance = -1;
+    float batteryVoltage = 0.0f;
+    int batteryPercent = 0;
+    if (!parsePacket(reinterpret_cast<const char*>(packetBytes), distance, batteryVoltage, batteryPercent)) {
+        Serial.print("Invalid packet: ");
+        Serial.println(reinterpret_cast<const char*>(packetBytes));
+        recordTiming(loraTiming, startedUs);
+        return;
+    }
+
+    const int waterLevel = calculateWaterLevel(distance);
+    updateStableLevel(waterLevel);
+
+    receiver.hasPacket = true;
+    receiver.distance = distance;
+    receiver.tankLevel = lastStableLevel;
+    receiver.rssi = static_cast<int>(radio.getRSSI());
+    receiver.batteryVoltage = batteryVoltage;
+    receiver.batteryPercent = batteryPercent;
+    receiver.displayDirty = true;
+    receiver.cloudDirty = true;
+    motorScreenActive = true;
+    motorScreenUntilMs = 0;
+
+    Serial.print("Distance: ");
+    Serial.print(distance);
+    Serial.print(" cm | Water Level: ");
+    Serial.print(receiver.tankLevel);
+    Serial.print("% | RSSI: ");
+    Serial.println(receiver.rssi);
+
+    recordTiming(loraTiming, startedUs);
+}
+
+static void handleCloud() {
+    const uint32_t startedUs = micros();
+    const uint32_t now = millis();
+    if (!receiver.hasPacket || !receiver.cloudDirty || now - lastCloudUploadMs < CLOUD_UPLOAD_INTERVAL_MS) {
+        recordTiming(cloudTiming, startedUs);
+        return;
+    }
+
+    if (WiFi.status() != WL_CONNECTED) {
+        recordTiming(cloudTiming, startedUs);
+        return;
+    }
+
+    CloudResponse cloud = ota_device_update_and_fetch(
+        receiver.tankLevel,
+        motorState,
+        receiver.rssi,
+        receiver.batteryPercent
+    );
+
+    supplyState = cloud.supply;
+    motorAutomationState = cloud.motorAutomation;
+    overflowThreshold = (cloud.overflowThreshold > 0) ? cloud.overflowThreshold : 90;
+    emptyDistanceCm = overflowThreshold;
+    receiver.cloudDirty = false;
+    lastCloudUploadMs = now;
+
+    if (cloud.ota) {
+        Serial.println("Cloud requested reboot for OTA");
+        ESP.restart();
+    }
+
+    recordTiming(cloudTiming, startedUs);
+}
+
+static void handleOTA() {
+    const uint32_t startedUs = micros();
+    const uint32_t now = millis();
+    if (now - lastOtaCheckMs < OTA_CHECK_INTERVAL_MS) {
+        recordTiming(otaTiming, startedUs);
+        return;
+    }
+    lastOtaCheckMs = now;
+
+    if (WiFi.status() == WL_CONNECTED) {
+        checkForOTAUpdate();
+    }
+
+    recordTiming(otaTiming, startedUs);
+}
+
+static void handleDisplay() {
+    const uint32_t startedUs = micros();
+    const uint32_t now = millis();
+
+    if (now - lastDisplayMs < DISPLAY_MIN_INTERVAL_MS) {
+        recordTiming(displayTiming, startedUs);
+        return;
+    }
+
+    if (motorScreenActive) {
+        if (motorScreenUntilMs == 0) {
+            displayMotorStatus(motorState);
+            motorScreenUntilMs = now + DISPLAY_MOTOR_SCREEN_MS;
+            lastDisplayMs = now;
+            recordTiming(displayTiming, startedUs);
+            return;
+        }
+
+        if (static_cast<int32_t>(now - motorScreenUntilMs) < 0) {
+            recordTiming(displayTiming, startedUs);
+            return;
+        }
+
+        motorScreenActive = false;
+        motorScreenUntilMs = 0;
+        receiver.displayDirty = true;
+    }
+
+    if (receiver.displayDirty) {
+        displayStatus(receiver.tankLevel, receiver.rssi, receiver.batteryPercent);
+        receiver.displayDirty = false;
+        lastDisplayMs = now;
+    }
+
+    recordTiming(displayTiming, startedUs);
+}
+
+static void handleDiagnostics() {
+#if DEBUG_TIMING
+    const uint32_t now = millis();
+    if (now - lastDiagnosticMs < DIAGNOSTIC_INTERVAL_MS) {
+        return;
+    }
+    lastDiagnosticMs = now;
+
+    Serial.printf(
+        "Timing us last/max - LoRa:%lu/%lu WiFi:%lu/%lu Cloud:%lu/%lu OTA:%lu/%lu Motor:%lu/%lu Display:%lu/%lu IRQ:%lu Heap:%lu\n",
+        loraTiming.lastUs, loraTiming.maxUs,
+        wifiTiming.lastUs, wifiTiming.maxUs,
+        cloudTiming.lastUs, cloudTiming.maxUs,
+        otaTiming.lastUs, otaTiming.maxUs,
+        motorTiming.lastUs, motorTiming.maxUs,
+        displayTiming.lastUs, displayTiming.maxUs,
+        loraInterruptCount,
+        ESP.getFreeHeap()
+    );
+#endif
+}
+
+static void initLoRa() {
+    Serial.print("[SX1276] Initializing ... ");
+    const int state = radio.begin(865.0, 125.0, 9, 5, 0x12, 17, 8, 0);
+    if (state != RADIOLIB_ERR_NONE) {
+        Serial.print("failed, code ");
+        Serial.println(state);
+        while (true) {
+            delay(1000);
+        }
+    }
+
+    radio.setPacketReceivedAction(onLoRaDio0);
+    const int receiveState = radio.startReceive();
+    Serial.println(receiveState == RADIOLIB_ERR_NONE ? "success!" : "RX start failed");
+}
+
+void setup() {
+    Serial.begin(115200);
+    initDisplay();
+    initMotorPins();
+
+    WiFi.mode(WIFI_STA);
+    WiFi.setAutoReconnect(false);
+    beginWiFiConnection();
+
+    supabaseInit(SUPABASE_URL, SUPABASE_KEY);
+    initLoRa();
+
+    lastOtaCheckMs = millis();
+}
+
+void loop() {
+    handleLoRa();
+    handleWiFi();
+    handleMotor();
+    handleCloud();
+    handleOTA();
+    handleDisplay();
+    handleDiagnostics();
+    yield();
 }
