@@ -545,7 +545,7 @@ void displayStatus(
 
     display.setCursor(panelX + 2, 98);
     display.setFont(&FreeSans9pt7b);
-    drawSignalIcon(103, 103, -70);
+    drawSignalIcon(103, 103, rssi);
 
     display.setTextColor(ST77XX_WHITE);
     display.setCursor(panelX + 34, 102);
@@ -557,7 +557,7 @@ void displayStatus(
 
     display.setTextColor(ST77XX_YELLOW);
     display.setCursor(panelX - 20, 148);
-    drawBatteryIcon(panelX+2, 112, 82);
+    drawBatteryIcon(panelX+2, 112, batteryPercent);
     display.setTextColor(ST77XX_WHITE);
     display.setCursor(panelX + 32, 122);
     display.print(batteryPercent);
@@ -565,30 +565,15 @@ void displayStatus(
     // display.setCursor(panelX + 62, 122);
     display.print("%");
 
-    // =====================================================
-    // ANIMATION
-    // =====================================================
-
-    capacity += 10;
-    if(capacity > 100) {
-
-        capacity = 0;
-    }
-    delay(2000);
-  
 }
 
 
 void displayMotorStatus(bool motorRunning)
 {
     bool status = motorRunning;
-    display.fillRect(
-        0,
-        0,
-        160,
-        30,
-        ST77XX_WHITE
-    );
+    display.fillScreen(ST77XX_BLACK);
+
+    display.fillRect(0, 0, 160, 30, ST77XX_WHITE);
 
     display.setTextColor(ST77XX_BLACK);
 
@@ -598,18 +583,11 @@ void displayMotorStatus(bool motorRunning)
 
     display.print("MOTOR");
 
-    uint16_t motorColor;
-
-    if(status)
-        motorColor = ST77XX_GREEN;
-    else
-        motorColor = ST77XX_RED;
-
     // Draw motor
     drawMotorIcon(
         15,
         48,
-        motorColor
+        status
     );
 
     // ON/OFF text
